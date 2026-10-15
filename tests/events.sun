@@ -1,0 +1,103 @@
+using std;
+/** Runs event-loop scenarios in separate GTK main-thread processes. */
+module event_loop_tests {
+  /** Starts one bounded display-backed client with core dumps disabled. */
+  function scenario(name: static_ptr<u8>) checks.Result<std.process.Output> {
+    var a = make_heap_allocator();
+    var command = std.process.Command(a, "sh");
+    command.add_arg("-c");
+    command.add_arg("ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a \"$1/event-client\" \"$2\"");
+    command.add_arg("event-test");
+    command.add_arg(test_build.directory());
+    command.add_arg(name);
+    return checks.Result.Ok(try std.test.expect_system(command.output()));
+  }
+
+  /** Checks FIFO handlers, queued cancellation, and independent polling. */
+  test_function ordering() checks.Result<void> {
+    var output = try scenario("ordering");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks callback-time registration and same-callback timer cancellation. */
+  test_function deferred() checks.Result<void> {
+    var output = try scenario("deferred");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks one-shot and repeated timers without catch-up bursts. */
+  test_function timers() checks.Result<void> {
+    var output = try scenario("timers");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks quit, callback errors, and completion cleanup. */
+  test_function completion() checks.Result<void> {
+    var output = try scenario("completion");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks close notifications, replacement windows, and automatic exit. */
+  test_function windows() checks.Result<void> {
+    var output = try scenario("windows");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks foreign IDs, stale IDs, and nested dispatch rejection. */
+  test_function identities() checks.Result<void> {
+    var output = try scenario("identities");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks emitter retention after its Sun wrapper is destroyed. */
+  test_function ownership() checks.Result<void> {
+    var output = try scenario("ownership");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Checks GTK receives a turn between bounded callback batches. */
+  test_function fairness() checks.Result<void> {
+    var output = try scenario("fairness");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
+  /** Rejects worker-thread loop mutation before native access. */
+  test_function worker() checks.Result<void> {
+    var output = try scenario("worker");
+    try std.test.assert_ne(output.status(), 0);
+    try std.test.assert(output.stderr().contains("must be used and destroyed on the main thread"));
+  }
+
+  /** Rejects recursive manual iteration inside a callback. */
+  test_function manual() checks.Result<void> {
+    var output = try scenario("manual");
+    try std.test.assert_ne(output.status(), 0);
+    try std.test.assert(output.stderr().contains("Manual GTK iteration during callback dispatch is forbidden"));
+  }
+
+  /** Verifies native reference release on success, callback error, and an unrun loop. */
+  test_function cleanup() checks.Result<void> {
+    var output = try scenario("cleanup");
+    try checks.success(output);
+  }
+
+  /** Prevents user code from bypassing deferred mutation through registry fields. */
+  test_function registry_is_private() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var source = String("/** Attempts direct mutation of the callback registry. */\nfunction corrupt(loop: ref gtk.EventLoop<i32>) void { loop.handlers.clear(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var path = fixture.file("client.sun");
+    try checks.write(path, source);
+    var result = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    try std.test.assert_ne(result.status(), 0);
+    try std.test.assert(result.stderr().contains("private"));
+    try std.test.assert(result.stderr().contains("handlers"));
+  }
+}

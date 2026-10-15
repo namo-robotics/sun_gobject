@@ -26,7 +26,7 @@
     {
       "label": "GTK demo",
       "type": "shell",
-      "command": "LD_LIBRARY_PATH=build/native ./build/gtk-demo",
+      "command": "./build/gtk-demo",
       "problemMatcher": []
     },
     {

@@ -13,7 +13,7 @@ jobs:
         run: >-
           docker run --rm --user "$(id -u):$(id -g)"
           -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev
-          bash -c './build.sh && sun fmt --check src tools examples tests/main.sun tests/runtime.sun tests/support.sun tests/generator.sun tests/integration.sun'
+          bash -c './build.sh && sun fmt --check src tools examples tests/main.sun tests/runtime.sun tests/support.sun tests/generator.sun tests/integration.sun tests/events.sun tests/event-client.sun'
       - name: Upload generation evidence and test results
         if: always()
         uses: actions/upload-artifact@v4

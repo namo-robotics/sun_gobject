@@ -16,11 +16,11 @@ module build_tasks {
     return SystemResult.Ok(text);
   }
 
-  /** Runs a build command and displays its successful output. */
+  /** Streams build diagnostics and returns a failed command status to the caller. */
   function run(command: ref std.process.Command) SystemResult<void> {
-    var text = try capture(command);
-    if (text.is_empty() == false) {
-      println(text);
+    var status = try command.status();
+    if (status != 0) {
+      return SystemResult.Error(Error(status, "Build command failed"));
     }
     return SystemResult.Ok;
   }
@@ -44,18 +44,43 @@ module build_tasks {
     command.add_arg("--lib-path");
     command.add_arg("build");
     if (native) {
-      var pkg = std.process.Command(a, "pkg-config");
-      pkg.add_arg("--libs");
-      pkg.add_arg("gtk4");
-      pkg.add_arg("gio-2.0");
-      var flags = try capture(pkg);
-      var words = flags.split_whitespace(a);
-      for (var word: ref String in words) {
-        command.add_arg(word);
-      }
       command.add_arg("-Lbuild/native");
     }
     return SystemResult.Ok(command);
+  }
+
+  /** Adds system dependencies after static archives so the linker resolves their symbols. */
+  function link_gtk(command: ref std.process.Command) SystemResult<void> {
+    var a = make_heap_allocator();
+    var pkg = std.process.Command(a, "pkg-config");
+    pkg.add_arg("--libs");
+    pkg.add_arg("gtk4");
+    pkg.add_arg("gio-2.0");
+    var flags = try capture(pkg);
+    var words = flags.split_whitespace(a);
+    for (var word: ref String in words) {
+      command.add_arg(word);
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Forces relinking when a native dependency changed outside Sun's source cache. */
+  function native_dependency(command: ref std.process.Command, library: static_ptr<u8>, output: static_ptr<u8>) SystemResult<void> {
+    var a = make_heap_allocator();
+    var exists = std.process.Command(a, "test");
+    exists.add_arg("-f");
+    exists.add_arg(library);
+    if (try exists.status() != 0) {
+      return SystemResult.Error(Error(1, "Build native dependencies before compiling Sun programs"));
+    }
+    var newer = std.process.Command(a, "test");
+    newer.add_arg(library);
+    newer.add_arg("-nt");
+    newer.add_arg(output);
+    if (try newer.status() == 0) {
+      command.add_arg("--force-rebuild");
+    }
+    return SystemResult.Ok;
   }
 
   /** Writes text only when it changed, preserving incremental test freshness. */
@@ -119,6 +144,7 @@ module build_tasks {
   public function build() SystemResult<void> {
     var a = make_heap_allocator();
     var version = try prepare();
+    println("Compiling GIR generator");
     var generator = try compile(false);
     generator.add_arg("-lglib-2.0");
     generator.add_arg("-c");
@@ -142,6 +168,7 @@ module build_tasks {
     var words = hash_output.split_whitespace(a);
     revision.append(":sources-sha256=");
     revision.append(words[0]);
+    println("Generating bindings");
     var generate = std.process.Command(a, "build/sun-gir");
     generate.add_arg("--selection");
     generate.add_arg("bindings/selection.xml");
@@ -158,6 +185,7 @@ module build_tasks {
     generate.add_arg("--generator-revision");
     generate.add_arg(revision);
     try run(generate);
+    println("Compiling Sun bundles");
     var core = try compile(false);
     core.add_arg("--emit-moon");
     core.add_arg("-o");
@@ -170,18 +198,34 @@ module build_tasks {
     gtk.add_arg("build/sun_gtk.moon");
     gtk.add_arg("build/generated/sun_gtk.sun");
     try run(gtk);
+    println("Compiling GTK demo");
     var demo = try compile(true);
-    demo.add_arg("-lsun_gobject_native");
+    demo.add_arg("-l:libsun_gobject_native.a");
+    try link_gtk(demo);
     demo.add_arg("-c");
     demo.add_arg("-o");
     demo.add_arg("build/gtk-demo");
+    try native_dependency(demo, "build/native/libsun_gobject_native.a", "build/gtk-demo");
     demo.add_arg("examples/gtk-demo.sun");
     try run(demo);
+    println("Compiling event test client");
+    var events = try compile(true);
+    events.add_arg("-lsun_gobject_test_support");
+    try link_gtk(events);
+    events.add_arg("-c");
+    events.add_arg("-o");
+    events.add_arg("build/event-client");
+    try native_dependency(events, "build/native/libsun_gobject_test_support.a", "build/event-client");
+    events.add_arg("tests/event-client.sun");
+    try run(events);
+    println("Compiling Sun tests");
     var tests = try compile(true);
     tests.add_arg("-lsun_gobject_test_support");
+    try link_gtk(tests);
     tests.add_arg("-c");
     tests.add_arg("-o");
     tests.add_arg("build/sun-gobject-tests");
+    try native_dependency(tests, "build/native/libsun_gobject_test_support.a", "build/sun-gobject-tests");
     tests.add_arg("tests/main.sun");
     try run(tests);
     return SystemResult.Ok;
@@ -231,6 +275,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   } else if (args.size() == 3 and args[1].equals_literal("install")) {
     result = build_tasks.install(args[2]);
   } else if (args.size() == 2 and args[1].equals_literal("test")) {
+    println("Running Sun tests");
     var tests = std.process.Command(a, "build/sun-gobject-tests_test");
     match tests.status() {
       SystemResult.Ok(status) => {

@@ -267,7 +267,16 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     files.push(String("sun_gobject.sun"));
     contents.push(core);
     files.push(String("sun_gtk.sun"));
-    contents.push(String("manifest { source_files: [\"gtk.sun\"] libraries: [\"sun_gobject.moon\", \"stdlib.moon\"] }\n"));
+    var gtk_support = support.clone(a);
+    gtk_support.append("/gtk.sun");
+    var gtk_bundle = String("manifest { source_files: [\"gtk.sun\", ");
+    gtk_bundle.append(gir.quote(gtk_support));
+    var events_support = support.clone(a);
+    events_support.append("/events.sun");
+    gtk_bundle.append(", ");
+    gtk_bundle.append(gir.quote(events_support));
+    gtk_bundle.append("] libraries: [\"sun_gobject.moon\", \"stdlib.moon\"] }\n");
+    contents.push(gtk_bundle);
   }
   // Validate every declaration before touching output files.
   for (var i: i64 = 0; i < files.size(); i += 1) {

@@ -33,19 +33,20 @@ cmake -S native --preset dev-debug # unoptimized native debugging
 cmake --build build/native -j$(($(nproc)/2))
 sun tools/build.sun -- build
 sun tools/build.sun -- test
-LD_LIBRARY_PATH="$PWD/build/native" ./build/gtk-demo
+./build/gtk-demo
 ```
 
 The last command needs a desktop display. For automated display testing:
 
 ```sh
-LD_LIBRARY_PATH="$PWD/build/native" GTK_A11Y=none GSK_RENDERER=cairo \
+GTK_A11Y=none GSK_RENDERER=cairo \
   dbus-run-session -- xvfb-run -a ./build/gtk-demo --self-test
 ```
 
 The application opens a window and button; clicking changes its label. The
 self-test activates the real signal, checks the resulting label, closes the
-window, and verifies callback cleanup. The native Sun integration test runs this
+window, and verifies that owned buttons survive parent destruction. It also checks
+invalid text, duplicate parenting, and operations on closed windows. The native Sun integration test runs this
 scenario under Xvfb with a timeout.
 
 All automated checks are native Sun `test_function` tests, registered through
@@ -74,11 +75,17 @@ individual test from the workspace root:
   and GTK4. Add declarations here only when their ABI mapping is supported.
 - `bindings/overrides.xml`: explicit GIR corrections. A `<set symbol="..."
   attribute="..." value="..."/>` updates an attribute on exactly one callable.
-- `src/support.sun`: owned objects/strings/errors, boolean/string GValue
-  properties, and signal connection lifetime helpers.
+- `src/gtk.sun`: safe application, window, and button owners with checked text,
+  parenting, main-thread enforcement, and click events.
+- `src/events.sun`: typed callback registration, deferred commands, timers, and
+  the main-thread event dispatcher.
+- `src/support.sun`: low-level ownership and property helpers with raw-pointer
+  validity and ownership contracts.
 - `native/`: C sources, CMake configuration, and native build presets; compiled
   artifacts go in `build/native/`. This subproject builds independently of Sun.
 - `tools/build.sun`: Sun build, test, and installation orchestration.
+- `native/ui.c`: native signal event storage, UTF-8 validation, and the Linux
+  main-thread guard used by the safe GTK layer.
 - `native/signals.c`: typed adapters for void signals with no parameters and
   `notify` signals. GObject erases function-pointer types that Sun cannot currently
   cast. The adapter checks the runtime signature before connecting.
@@ -113,10 +120,101 @@ Generated sources, bundle entrypoints, `coverage.tsv`, `gir-model.json`, and
 `provenance.json` live under `build/generated`. The Sun build driver supplies compiler and generator
 revision values. Sources are deterministic for identical inputs and options.
 
+## Safe GTK API
+
+Import `sun_gtk.moon` to use `gtk.Application`, `gtk.Window`, and `gtk.Button`.
+The demo in `examples/gtk-demo.sun` uses these types without `unsafe` blocks.
+Constructors and checked operations report failures through `SystemResult`.
+
+The preferred interface is `gtk.EventLoop<State>`. Put widgets and application
+data in a Sun state object and register named functions with this signature:
+
+```sun
+/** Updates the button after native signal dispatch has returned. */
+function clicked(state: ref AppState, context: ref gtk.EventContext<AppState>) SystemResult<void> {
+  var greeting = String("Hello!");
+  try state.button.set_label(greeting);
+  return SystemResult.Ok;
+}
+```
+
+After constructing `app` and `state`, transfer the application into the loop:
+
+```sun
+var loop = gtk.EventLoop<AppState>(app);
+var click_id = try loop.on_clicked(state.button, clicked);
+try loop.run(state);
+```
+
+The complete runnable example is `examples/gtk-demo.sun`. State is borrowed only
+while `run()` executes. Registrations retain native emitters independently of Sun
+widget wrappers; no Sun stack pointer or callback is stored in GTK.
+
+| Operation | Behavior |
+| --- | --- |
+| `on_clicked(button, callback)` | Register a button click handler. |
+| `on_closed(window, callback)` | Observe removal from this application's window list; cannot veto closure. |
+| `after(delay_ms, callback)` | One-shot timer; zero schedules a future turn. |
+| `every(interval_ms, callback)` | Repeat after each callback completes; zero is rejected. |
+| `disconnect(id)` | Cancel future and already-queued deliveries; repeated cancellation is harmless. |
+
+Callbacks receive `EventContext<State>`, which exposes `kind()` and
+`registration()`, the same registration/cancellation methods, `create_window()`,
+and `quit()`. A `RegistrationId` belongs to one loop; use `copy()` when another
+owned copy is needed. Dropping the ID does not disconnect its registration.
+
+Changes requested through a callback context are staged in order and committed
+after that callback succeeds. A newly registered handler sees only future native
+events. A click emitted from inside a callback queues work rather than recursively
+calling Sun. Staged native registration errors are returned by `run()` when the
+changes are committed. Failed callbacks discard their staged changes and return
+their error; mutations already made to application state are not rolled back.
+
+Events use FIFO order; handlers for the same signal follow registration order.
+The dispatcher services GTK between bounded batches and sleeps in GLib when no
+work is queued. Timers use monotonic milliseconds and never accumulate catch-up
+bursts. Repeating timers rearm after the callback and its staged changes complete.
+
+`quit()` exits after the current callback and its staged changes. The loop also
+exits after delivering close notifications when no application windows remain;
+a close callback may create a replacement window to continue. Timers alone do
+not keep a windowless application alive. Loops are single-use, and every exit
+releases registrations, timer sources, retained emitters, and queued work. A loop
+that is dropped without running performs the same cleanup.
+
+Only one callback loop may own the default GTK context at a time. Nested `run()`
+returns an error; calling the legacy `Application.iterate()` while a callback loop
+is active terminates before recursive native dispatch. `Button.take_click()`
+remains available as independent polling and does not consume registered events.
+
+Each wrapper owns its native reference. A window retains its child independently,
+and closing it does not invalidate a still-owned button. `click()` emits the real
+signal for automated interaction. Destruction disconnects native subscriptions
+before freeing their state.
+
+Allocation is explicit in the API's cost model: creating a loop allocates native
+queue and Sun registry storage, registrations retain emitters and allocate adapter
+state, dispatch contexts allocate staging storage, and native event delivery
+allocates a queue entry. Growing registries and staged-command lists may allocate.
+This interface does not promise allocation-free registration or dispatch.
+
+The API validates UTF-8 and embedded NULs, rejects already-parented buttons and
+operations on closed windows, and requires a valid application identifier.
+Creation, methods, and destruction enforce the initial Linux thread at runtime;
+using or dropping a wrapper on a worker terminates before it can access GTK.
+Thread affinity is not yet a compile-time Sun constraint. Native handle access
+requires an explicit `unsafe` block and transfers no ownership.
+
+This layer covers the demo's widgets, named callbacks, click and close events,
+and timers with a non-unique application. It does not yet provide general widget
+casts, arbitrary signals, captured closures, or single-instance activation handling. Extend the typed
+layer for new operations; keep raw pointer contracts in the low-level API.
+
 ## Ownership and consumer use
 
-Native pointer validity, property types, and transferred reference ownership are
-caller contracts. These wrappers do **not** make arbitrary foreign pointers safe.
+For the low-level `gobject`, `glib`, and `.raw` APIs, native pointer validity,
+property types, and transferred reference ownership remain caller contracts.
+These helpers do **not** make arbitrary foreign pointers safe.
 `OwnedObject` adopts one owned reference; `retain_borrowed` adds a reference;
 `sink_floating` sinks a floating reference or retains an ordinary object.
 `borrow()` never transfers ownership and `release()` does. Sun moves owned handles.
@@ -134,14 +232,17 @@ Install the two bundles and adapter with:
 sun tools/build.sun -- install "$PWD/dist"
 sun --dynamic --path-var SUN_GOBJECT_BUILD="$PWD/dist/lib/sun" \
   --lib-path "$PWD/dist/lib/sun" \
-  -L"$PWD/dist/lib" -lsun_gobject_native $(pkg-config --libs gtk4) \
+  -L"$PWD/dist/lib" -l:libsun_gobject_native.a $(pkg-config --libs gtk4) \
   -c -o my-app examples/gtk-demo.sun
-LD_LIBRARY_PATH="$PWD/dist/lib" ./my-app
+./my-app
 ```
 
 Consumers import `sun_gobject.moon`, `sun_gtk.moon` and `stdlib.moon`. Native GTK/GLib
-libraries remain system dependencies; do not statically bundle a second GObject
-runtime. The tests install into a separate prefix and build a separate consumer
+libraries remain shared system dependencies because the installed GTK package has
+no static archive. The project adapter is linked statically from
+`libsun_gobject_native.a`, so running a built or installed program needs no
+`LD_LIBRARY_PATH` override. The explicit archive link also ignores shared adapters
+left over from older builds. GTK and the application share one GObject runtime. The tests install into a separate prefix and build a separate consumer
 with its own root config, so it cannot accidentally import build-tree bundles.
 
 Initial support is native **x86_64 Linux GNU** only. Bundles must match the Sun
