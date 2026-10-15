@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Bootstrap Sun",
+      "type": "shell",
+      "command": "./scripts/bootstrap-sun.sh",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build and test",
+      "type": "shell",
+      "command": "./build.sh",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Test",
+      "type": "shell",
+      "command": "sun tools/build.sun -- test",
+      "problemMatcher": []
+    },
+    {
+      "label": "GTK demo",
+      "type": "shell",
+      "command": "LD_LIBRARY_PATH=build/native ./build/gtk-demo",
+      "problemMatcher": []
+    },
+    {
+      "label": "Configure native",
+      "type": "shell",
+      "command": "cmake -S native --preset dev-fast",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build native",
+      "type": "shell",
+      "command": "cmake --build build/native -j$(($(nproc)/2))",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Sun",
+      "type": "shell",
+      "command": "sun tools/build.sun -- build",
+      "problemMatcher": []
+    }
+  ]
+}

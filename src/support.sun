@@ -1,0 +1,206 @@
+using std;
+/** Provides explicit ownership and property operations over raw GObject pointers. */
+public module gobject {
+  /** Takes one already-owned reference. Construction from a raw pointer is an
+     * unsafe ownership contract: do not adopt a borrowed reference. */
+  public class OwnedObject {
+    var pointer: raw_ptr<u8>;
+    /** Initializes OwnedObject with the supplied owned values or native pointer contract. */
+    init(pointer: raw_ptr<u8>) {
+      this.pointer = pointer;
+    }
+
+    /** Releases the native resources owned by OwnedObject. */
+    deinit() {
+      if (this.pointer != null) {
+        unsafe { raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Returns a borrowed native pointer without changing its reference count. */
+    public const method borrow() raw_ptr<u8> {
+      return this.pointer;
+    }
+
+    /** Transfers the owned reference to the caller and disables destructor cleanup. */
+    public method release() raw_ptr<u8> {
+      var p = this.pointer;
+      this.pointer = null;
+      return p;
+    }
+  }
+  /** Adds a native reference; the caller must supply a live GObject or null. */
+  public function retain_borrowed(pointer: raw_ptr<u8>) OwnedObject {
+    if (pointer != null) {
+      unsafe { raw.g_object_ref(pointer); };
+    }
+    return OwnedObject(pointer);
+  }
+
+  /** Sinks a floating reference, otherwise adds a reference. */
+  public function sink_floating(pointer: raw_ptr<u8>) OwnedObject {
+    if (pointer != null) {
+      unsafe { raw.g_object_ref_sink(pointer); };
+    }
+    return OwnedObject(pointer);
+  }
+  // GValue's data union is opaque. native/signals.c verifies size/offsets.
+  class Value {
+    var type: u64 = 0;
+    var slot0: u64 = 0;
+    var slot1: u64 = 0;
+  }
+  _assert_c_layout<Value>(24, 8, 0, 8, 16);
+  /** Sets a writable boolean property on a live object; raw pointer validity is the caller contract. */
+  public function set_boolean(object: raw_ptr<u8>, property: raw_ptr<u8>, enabled: bool) void {
+    var value = Value();
+    var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));
+    unsafe {
+      raw.g_value_init(p, 20);
+      raw.g_value_set_boolean(p, enabled ? 1 : 0);
+      raw.g_object_set_property(object, property, p);
+      raw.g_value_unset(p);
+    };
+  }
+
+  /** Reads a boolean property from a live object with a matching property type. */
+  public function get_boolean(object: raw_ptr<u8>, property: raw_ptr<u8>) bool {
+    var value = Value();
+    var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));
+    var result: i32 = 0;
+    unsafe {
+      raw.g_value_init(p, 20);
+      raw.g_object_get_property(object, property, p);
+      result = raw.g_value_get_boolean(p);
+      raw.g_value_unset(p);
+    };
+    return result != 0;
+  }
+
+  /** Copies a NUL-terminated string into a writable string property. */
+  public function set_string(object: raw_ptr<u8>, property: raw_ptr<u8>, text: raw_ptr<u8>) void {
+    var value = Value();
+    var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));
+    unsafe {
+      raw.g_value_init(p, 64);
+      raw.g_value_set_string(p, text);
+      raw.g_object_set_property(object, property, p);
+      raw.g_value_unset(p);
+    };
+  }
+
+  /** Copies a nullable string property before releasing its temporary GValue. */
+  public function get_string(object: raw_ptr<u8>, property: raw_ptr<u8>) Option<String> {
+    var a = make_heap_allocator();
+    var value = Value();
+    var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));
+    unsafe { raw.g_value_init(p, 64); raw.g_object_get_property(object, property, p); };
+    var text = unsafe { raw.g_value_get_string(p); };
+    if (text == null) {
+      unsafe { raw.g_value_unset(p); };
+      return Option.None;
+    }
+    var copy = from_c_str(a, text);
+    unsafe { raw.g_value_unset(p); };
+    return Option.Some(copy);
+  }
+  /** Exposes named-function callbacks and deterministic signal disconnection. */
+  public module signals {
+    /** Connects a void signal with no arguments, taking ownership of userdata cleanup. */
+    public extern "C" function sg_connect_void(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
+
+    /** Connects a property notification and releases userdata exactly once. */
+    public extern "C" function sg_connect_notify(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
+    /** Keeps the emitter alive, disconnecting before releasing it. Callbacks
+         * must be module functions; userdata must outlive the connection. */
+    public class Connection {
+      var object: raw_ptr<u8>;
+      var id: u64;
+      /** Initializes Connection with the supplied owned values or native pointer contract. */
+      init(object: raw_ptr<u8>, id: u64) {
+        this.object = object;
+        this.id = id;
+        if (object != null) {
+          unsafe { raw.g_object_ref(object); };
+        }
+      }
+
+      /** Disconnects a still-active handler; repeated calls have no effect. */
+      public method disconnect() void {
+        if (this.id != 0 and this.object != null) {
+          unsafe {
+            if (raw.g_signal_handler_is_connected(this.object, this.id) != 0) {
+              raw.g_signal_handler_disconnect(this.object, this.id);
+            }
+          };
+          this.id = 0;
+        }
+      }
+
+      /** Releases the native resources owned by Connection. */
+      deinit() {
+        this.disconnect();
+        if (this.object != null) {
+          unsafe { raw.g_object_unref(this.object); };
+        }
+      }
+    }
+  }
+}
+/** Owns GLib allocations and errors with explicit nullable pointer contracts. */
+public module glib {
+  /** Owns a string allocated with GLib allocation functions. */
+  public class OwnedCString {
+    var pointer: raw_ptr<u8>;
+    /** Initializes OwnedCString with the supplied owned values or native pointer contract. */
+    init(pointer: raw_ptr<u8>) {
+      this.pointer = pointer;
+    }
+
+    /** Releases the native resources owned by OwnedCString. */
+    deinit() {
+      unsafe { raw.g_free(this.pointer); };
+    }
+
+    /** Returns a borrowed native pointer without changing its reference count. */
+    public const method borrow() raw_ptr<u8> {
+      return this.pointer;
+    }
+
+    /** Copies the native string into Sun storage, preserving null as None. */
+    public const method copy() Option<String> {
+      if (this.pointer == null) {
+        return Option.None;
+      }
+      var a = make_heap_allocator();
+      return Option.Some(from_c_str(a, this.pointer));
+    }
+  }
+  /** Describes the native GError record; its offsets are checked against C headers. */
+  public class ErrorRecord {
+    public var domain: u32;
+    public var code: i32;
+    public var message: raw_ptr<u8>;
+  }
+  _assert_c_layout<ErrorRecord>(16, 8, 0, 4, 8);
+  /** Owns a nullable GError and releases it on destruction. */
+  public class OwnedError {
+    var pointer: raw_ptr<u8>;
+    /** Initializes OwnedError with the supplied owned values or native pointer contract. */
+    init(pointer: raw_ptr<u8>) {
+      this.pointer = pointer;
+    }
+
+    /** Releases the native resources owned by OwnedError. */
+    deinit() {
+      if (this.pointer != null) {
+        unsafe { raw.g_error_free(this.pointer); };
+      }
+    }
+
+    /** Returns a borrowed native pointer without changing its reference count. */
+    public const method borrow() raw_ptr<u8> {
+      return this.pointer;
+    }
+  }
+}

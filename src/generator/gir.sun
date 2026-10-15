@@ -1,0 +1,281 @@
+using std;
+using sg;
+/** Loads versioned GIR documents and translates the selected native ABI. */
+public module gir {
+  /** Checks whether a candidate GIR file is readable. */
+  extern "C" function access(path: raw_ptr<u8>, mode: i32) i32;
+
+  /** Allocates a GLib checksum string for provenance. */
+  extern "C" function g_compute_checksum_for_string(kind: i32, text: raw_ptr<u8>, length: i64) raw_ptr<u8>;
+
+  /** Releases a GLib-allocated checksum string. */
+  extern "C" function g_free(p: raw_ptr<u8>) void;
+
+  /** Hashes input bytes and returns the owned hexadecimal digest. */
+  public function sha256(value: ref String) String {
+    var a = make_heap_allocator();
+    var p = unsafe { g_compute_checksum_for_string(2, value.c_str(), value.length()); };
+    var result = from_c_str(a, p);
+    unsafe { g_free(p); };
+    return result;
+  }
+  /** Owns the dependency closure and provenance of loaded GIR namespaces. */
+  public class Repository {
+    public var dirs: Vec<String>;
+    public var keys: Vec<String>;
+    public var hashes: Vec<String>;
+    public var docs: Vec<xml.Document>;
+    /** Initializes Repository with the supplied owned values or native pointer contract. */
+    init() {
+      var a = make_heap_allocator();
+      this.dirs = Vec<String>(a, 4);
+      this.keys = Vec<String>(a, 16);
+      this.hashes = Vec<String>(a, 16);
+      this.docs = Vec<xml.Document>(a, 16);
+    }
+
+    /** Loads a namespace once and recursively resolves its versioned dependencies. */
+    public method load(name: const ref String, version: const ref String) void {
+      var a = make_heap_allocator();
+      var key = name.clone(a);
+      key.append("-");
+      key.append(version);
+      for (var k: i64 = 0; k < this.keys.size(); k += 1) {
+        if (this.keys[k].equals(key)) {
+          return;
+        }
+      }
+      var prefix = name.clone(a);
+      prefix.append("-");
+      for (var k: i64 = 0; k < this.keys.size(); k += 1) {
+        if (this.keys[k].starts_with(prefix)) {
+          die("conflicting GIR dependency versions");
+        }
+      }
+      var file = key.clone(a);
+      file.append(".gir");
+      var path = String("");
+      for (var d: i64 = 0; d < this.dirs.size(); d += 1) {
+        var candidate = this.dirs[d].clone(a);
+        candidate.append("/");
+        candidate.append(file);
+        if (unsafe { access(candidate.c_str(), 4); } == 0) {
+          path = candidate;
+          break;
+        }
+      }
+      if (path.length() == 0) {
+        var error = String("missing GIR dependency: ");
+        error.append(file);
+        fail(error);
+      }
+      var content = read(path);
+      var hash = sha256(content);
+      var doc = xml.Document(content, path);
+      doc.parse();
+      var found = false;
+      var dependencies = Vec<String>(a, 8);
+      var versions = Vec<String>(a, 8);
+      for (var i: i64 = 0; i < doc.nodes.size(); i += 1) {
+        if (doc.nodes[i].name.equals_literal("namespace")) {
+          var actual = doc.nodes[i].attr("name");
+          var v = doc.nodes[i].attr("version");
+          if (actual.equals(name) == false or v.equals(version) == false) {
+            die("GIR namespace/version mismatch");
+          }
+          found = true;
+        }
+        if (doc.nodes[i].name.equals_literal("include")) {
+          dependencies.push(doc.nodes[i].attr("name"));
+          versions.push(doc.nodes[i].attr("version"));
+        }
+      }
+      if (found == false) {
+        die("GIR namespace missing");
+      }
+      this.keys.push(key);
+      this.hashes.push(hash);
+      this.docs.push(doc);
+      for (var i: i64 = 0; i < dependencies.size(); i += 1) {
+        this.load(dependencies[i], versions[i]);
+      }
+    }
+  }
+  /** Finds the first direct child element of the requested kind. */
+  public function child(doc: const ref xml.Document, parent: i64, kind: static_ptr<u8>) i64 {
+    for (var i = parent + 1; i < doc.nodes.size(); i += 1) {
+      if (doc.nodes[i].parent < parent) {
+        break;
+      }
+      if (doc.nodes[i].parent == parent and doc.nodes[i].name.equals_literal(kind)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** Maps a verified scalar, enum, or raw pointer ABI; rejects unknown layouts. */
+  public function type_name(repo: const ref Repository, doc: const ref xml.Document, node: i64) String {
+    var type_node = child(doc, node, "type");
+    if (type_node < 0) {
+      type_node = child(doc, node, "array");
+    }
+    if (type_node < 0) {
+      die("selected signature has no scalar/pointer type (arrays and varargs need an override)");
+    }
+    var ctype = doc.nodes[type_node].attr("c:type");
+    var name = doc.nodes[type_node].attr("name");
+    if (ctype.contains("*") or ctype.equals_literal("gpointer") or ctype.equals_literal("gconstpointer")) {
+      return String("raw_ptr<u8>");
+    }
+    if (name.equals_literal("none") or ctype.equals_literal("void")) {
+      return String("void");
+    }
+    if (name.equals_literal("gboolean") or name.equals_literal("gint") or name.equals_literal("gint32")) {
+      return String("i32");
+    }
+    if (name.equals_literal("guint") or name.equals_literal("guint32") or name.equals_literal("gunichar")) {
+      return String("u32");
+    }
+    if (name.equals_literal("gint64") or name.equals_literal("glong") or name.equals_literal("gssize")) {
+      return String("i64");
+    }
+    if (name.equals_literal("guint64") or name.equals_literal("gulong") or name.equals_literal("gsize") or name.equals_literal("GType")) {
+      return String("u64");
+    }
+    if (name.equals_literal("gfloat")) {
+      return String("f32");
+    }
+    if (name.equals_literal("gdouble")) {
+      return String("f64");
+    }
+    if (name.equals_literal("gint8")) {
+      return String("i8");
+    }
+    if (name.equals_literal("guint8")) {
+      return String("u8");
+    }
+    if (name.equals_literal("gint16")) {
+      return String("i16");
+    }
+    if (name.equals_literal("guint16")) {
+      return String("u16");
+    }
+    if (name.equals_literal("gpointer") or name.equals_literal("gconstpointer") or name.equals_literal("utf8") or name.equals_literal("filename")) {
+      return String("raw_ptr<u8>");
+    }
+    // Enums are only accepted when a declaration establishes their ABI category.
+    for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
+      for (var i: i64 = 0; i < repo.docs[d].nodes.size(); i += 1) {
+        var c = repo.docs[d].nodes[i].attr("c:type");
+        if (c.length() > 0 and c.equals(ctype)) {
+          if (repo.docs[d].nodes[i].name.equals_literal("enumeration")) {
+            return String("i32");
+          }
+          if (repo.docs[d].nodes[i].name.equals_literal("bitfield")) {
+            return String("u32");
+          }
+        }
+      }
+    }
+    var error = String("unsupported selected type: ");
+    error.append(name);
+    error.append(" / ");
+    error.append(ctype);
+    fail(error);
+    return String("");
+  }
+
+  /** Emits original GIR attributes as a single escaped documentation line. */
+  function annotations(doc: const ref xml.Document, node: i64, label: const ref String) String {
+    var result = String("    // ");
+    result.append(label);
+    for (var i: i64 = 0; i < doc.nodes[node].attributes.size(); i += 1) {
+      var key = quote(doc.nodes[node].attributes[i].name);
+      var value = quote(doc.nodes[node].attributes[i].value);
+      result.append(" ");
+      result.append(key);
+      result.append("=");
+      result.append(value);
+    }
+    result.append("\n");
+    return result;
+  }
+
+  /** Emits a selected extern declaration, rejecting unsupported ABI shapes. */
+  public function declaration(repo: const ref Repository, doc: const ref xml.Document, node: i64) String {
+    var symbol = doc.nodes[node].attr("c:identifier");
+    var fallible = doc.nodes[node].attr("throws");
+    if (fallible.equals_literal("1")) {
+      die("selected throwing signature needs explicit GError** support");
+    }
+    var result = String("    public extern \"C\" function ");
+    result.append(symbol);
+    result.append("(");
+    var documentation = String("    // Native ABI; ownership and nullability below are caller contracts.\n");
+    var parameters = child(doc, node, "parameters");
+    var count: i64 = 0;
+    if (parameters >= 0) {
+      for (var i = parameters + 1; i < doc.nodes.size(); i += 1) {
+        if (doc.nodes[i].parent < parameters) {
+          break;
+        }
+        if (doc.nodes[i].parent == parameters) {
+          if (doc.nodes[i].name.equals_literal("parameter") == false and doc.nodes[i].name.equals_literal("instance-parameter") == false) {
+            die("unsupported parameter construct");
+          }
+          var label = String("arg");
+          label.append(count);
+          var notes = annotations(doc, i, label);
+          documentation.append(notes);
+          if (count > 0) {
+            result.append(", ");
+          }
+          result.append("arg");
+          result.append(count);
+          result.append(": ");
+          var type = type_name(repo, doc, i);
+          result.append(type);
+          count += 1;
+        }
+      }
+    }
+    result.append(") ");
+    var ret = child(doc, node, "return-value");
+    if (ret < 0) {
+      die("return-value missing");
+    }
+    var label = String("return");
+    var notes = annotations(doc, ret, label);
+    documentation.append(notes);
+    var ret_type = type_name(repo, doc, ret);
+    result.append(ret_type);
+    result.append(";\n");
+    documentation.append(result);
+    return documentation;
+  }
+
+  /** Escapes text for JSON and generated Sun string literals. */
+  public function quote(s: const ref String) String {
+    var result = String("\"");
+    for (var i: i64 = 0; i < s.length(); i += 1) {
+      var c = byte(s, i);
+      if (c == 34 or c == 92) {
+        result.append_char(92);
+        result.append_char(c);
+      } else if (c == 10) {
+        result.append("\\n");
+      } else if (c == 13) {
+        result.append("\\r");
+      } else if (c == 9) {
+        result.append("\\t");
+      } else if (c < 32) {
+        die("control character in metadata");
+      } else {
+        result.append_char(c);
+      }
+    }
+    result.append("\"");
+    return result;
+  }
+}

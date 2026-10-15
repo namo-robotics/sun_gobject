@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<root xmlns:c="urn:test" a="&lt;&amp;&quot;&apos;&gt;" c:unicode="&#x1f600;">
+  <!-- comment --> <child>héllo &#65;<![CDATA[<raw>]]></child>
+</root>

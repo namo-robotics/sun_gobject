@@ -1,0 +1,8 @@
+/** Provides a build product whose companion binary runs the native Sun suite. */
+function main() i32 {
+  return 0;
+}
+manifest {
+  libraries: ["stdlib.moon", "sun_gobject.moon"],
+  test_files: ["support.sun", "runtime.sun", "generator.sun", "integration.sun", "$SUN_GOBJECT_BUILD/test-config.sun"]
+}

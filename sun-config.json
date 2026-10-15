@@ -1,0 +1,24 @@
+{
+  "root": true,
+  "sun_path": [
+    "$SUN_GOBJECT_BUILD"
+  ],
+  "path_variables": {
+    "SUN_GOBJECT_BUILD": "build"
+  },
+  "entrypoints": [
+    {
+      "name": "gir-generator",
+      "path": "src/generator/main.sun",
+      "type": "binary",
+      "output_name": "build/sun-gir"
+    },
+    {
+      "name": "tests",
+      "path": "tests/main.sun",
+      "type": "binary",
+      "output_name": "build/sun-gobject-tests",
+      "test_binary_name": "build/sun-gobject-tests_test"
+    }
+  ]
+}

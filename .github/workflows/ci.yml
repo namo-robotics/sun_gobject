@@ -1,0 +1,27 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build development image with Sun dev Debian package
+        run: docker build -t sun-gobject-dev .
+      - name: Build and test
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)"
+          -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev
+          bash -c './build.sh && sun fmt --check src tools examples tests/main.sun tests/runtime.sun tests/support.sun tests/generator.sun tests/integration.sun'
+      - name: Upload generation evidence and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-generation-and-tests
+          path: |
+            build/native/native-versions.txt
+            build/sun-version.txt
+            build/generated/provenance.json
+            build/generated/coverage.tsv
+            build/test-results.log

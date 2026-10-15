@@ -1,0 +1,132 @@
+using std;
+/** Exercises ownership, typed callbacks, properties, strings, and native ABI. */
+module runtime_tests {
+  var calls: i32 = 0;
+  var cleanups: i32 = 0;
+  /** Counts notifications delivered through the typed adapter. */
+  function notified(object: raw_ptr<u8>, data: raw_ptr<u8>) void {
+    if (data != object) {
+      calls = -100;
+    } else {
+      calls += 1;
+    }
+  }
+
+  /** Counts exactly-once release of the connection userdata. */
+  function cleanup(data: raw_ptr<u8>) void {
+    cleanups += 1;
+  }
+
+  /** Builds a floating object to verify sink behavior without a display. */
+  extern "C" function sg_test_floating() raw_ptr<u8>;
+
+  /** Returns an allocated error to test owned GError cleanup. */
+  extern "C" function sg_test_error() raw_ptr<u8>;
+
+  /** Returns the number of finalized probe objects. */
+  extern "C" function sg_test_finalized() i32;
+
+  /** Checks floating references, retained ownership, and finalization. */
+  test_function floating_ownership() {
+    if (true) {
+      var p = unsafe { sg_test_floating(); };
+      if (unsafe { gobject.raw.g_object_is_floating(p); } == 0) {
+        try std.test.fail("Runtime acceptance check 1 failed");
+      }
+      var owned = gobject.sink_floating(p);
+      if (unsafe { gobject.raw.g_object_is_floating(owned.borrow()); } != 0) {
+        try std.test.fail("Runtime acceptance check 2 failed");
+      }
+      if (true) {
+        var second = gobject.retain_borrowed(owned.borrow());
+      }
+      if (unsafe { sg_test_finalized(); } != 0) {
+        try std.test.fail("Runtime acceptance check 3 failed");
+      }
+    }
+    if (unsafe { sg_test_finalized(); } != 1) {
+      try std.test.fail("Runtime acceptance check 4 failed");
+    }
+  }
+
+  /** Checks properties and exactly-once signal cleanup. */
+  test_function properties_and_signals() {
+    calls = 0;
+    cleanups = 0;
+    var empty = gobject.OwnedObject(null);
+    var p = unsafe { gio.raw.g_simple_action_new("test", null); };
+    var action = gobject.OwnedObject(p);
+    var id = unsafe { gobject.signals.sg_connect_notify(p, "notify::enabled", notified, p, cleanup); };
+    if (id == 0) {
+      try std.test.fail("Runtime acceptance check 5 failed");
+    }
+    if (true) {
+      var connection = gobject.signals.Connection(p, id);
+      if (gobject.get_boolean(p, "enabled") == false) {
+        try std.test.fail("Runtime acceptance check 6 failed");
+      }
+      gobject.set_boolean(p, "enabled", false);
+      if (gobject.get_boolean(p, "enabled") or calls != 1) {
+        try std.test.fail("Runtime acceptance check 7 failed");
+      }
+      connection.disconnect();
+      connection.disconnect();
+      gobject.set_boolean(p, "enabled", true);
+      if (calls != 1 or cleanups != 1) {
+        try std.test.fail("Runtime acceptance check 8 failed");
+      }
+    }
+    if (cleanups != 1) {
+      try std.test.fail("Runtime acceptance check 9 failed");
+    }
+    // Rejected signal signatures still release transferred userdata once.
+    var invalid = unsafe { gobject.signals.sg_connect_void(p, "notify", notified, p, cleanup); };
+    if (invalid != 0 or cleanups != 2) {
+      try std.test.fail("Runtime acceptance check 10 failed");
+    }
+    if (true) {
+      var other = gobject.OwnedObject(unsafe { gio.raw.g_simple_action_new("other", null); });
+      unsafe { gobject.signals.sg_connect_notify(other.borrow(), "notify::enabled", notified, other.borrow(), cleanup); };
+    }
+    if (cleanups != 3) {
+      try std.test.fail("Runtime acceptance check 11 failed");
+    }
+  }
+
+  /** Checks nullable owned strings and UTF-8 copying. */
+  test_function owned_strings() {
+    var text = glib.OwnedCString(unsafe { glib.raw.g_strdup("héllo"); });
+    match text.copy() {
+      Option.Some(copy) => {
+        if (copy.equals_literal("héllo") == false) {
+          try std.test.fail("Runtime acceptance check 12 failed");
+        }
+      },
+      Option.None => {
+        try std.test.fail("Runtime acceptance check 13 failed");
+      }
+    };
+    var no_text = glib.OwnedCString(null);
+    match no_text.copy() {
+      Option.Some(copy) => {
+        try std.test.fail("Runtime acceptance check 14 failed");
+      },
+      Option.None => {}
+    };
+  }
+
+  /** Checks the native error layout and ownership. */
+  test_function owned_errors() {
+    var error = glib.OwnedError(unsafe { sg_test_error(); });
+    if (error.borrow() == null) {
+      try std.test.fail("Runtime acceptance check 15 failed");
+    }
+    var code = unsafe { _load<i32>(error.borrow(), 1); };
+    var message = unsafe { _load<raw_ptr<u8>>(error.borrow(), 1); };
+    var a = make_heap_allocator();
+    var copied = from_c_str(a, message);
+    if (code != 42 or copied.equals_literal("example error") == false) {
+      try std.test.fail("Runtime acceptance check 16 failed");
+    }
+  }
+}

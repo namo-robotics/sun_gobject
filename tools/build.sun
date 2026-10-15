@@ -1,0 +1,256 @@
+using std;
+/** Builds and installs Sun artifacts using separately compiled native libraries. */
+module build_tasks {
+  /** Runs a command, preserving diagnostics and returning failure to the caller. */
+  function capture(command: ref std.process.Command) SystemResult<String> {
+    var a = make_heap_allocator();
+    var output = try command.output();
+    if (output.status() != 0) {
+      eprintln(output.stdout());
+      eprintln(output.stderr());
+      return SystemResult.Error(Error(output.status(), "Build command failed"));
+    }
+    var text = output.stdout().clone(a);
+    text.append(output.stderr());
+    text.trim();
+    return SystemResult.Ok(text);
+  }
+
+  /** Runs a build command and displays its successful output. */
+  function run(command: ref std.process.Command) SystemResult<void> {
+    var text = try capture(command);
+    if (text.is_empty() == false) {
+      println(text);
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Selects the requested compiler or the compiler on PATH. */
+  function compiler() String {
+    var a = make_heap_allocator();
+    var env = std.env.Env(a);
+    return match env.get("SUN_EXECUTABLE") {
+      Option.Some(value) => value.clone(a),
+      Option.None => String("sun")
+    };
+  }
+
+  /** Creates a compiler command with this project's bundle and native paths. */
+  function compile(native: bool) SystemResult<std.process.Command> {
+    var a = make_heap_allocator();
+    var executable = compiler();
+    var command = std.process.Command(a, executable);
+    command.add_arg("--dynamic");
+    command.add_arg("--lib-path");
+    command.add_arg("build");
+    if (native) {
+      var pkg = std.process.Command(a, "pkg-config");
+      pkg.add_arg("--libs");
+      pkg.add_arg("gtk4");
+      pkg.add_arg("gio-2.0");
+      var flags = try capture(pkg);
+      var words = flags.split_whitespace(a);
+      for (var word: ref String in words) {
+        command.add_arg(word);
+      }
+      command.add_arg("-Lbuild/native");
+    }
+    return SystemResult.Ok(command);
+  }
+
+  /** Writes text only when it changed, preserving incremental test freshness. */
+  function write(path: ref String, value: ref String) SystemResult<void> {
+    var a = make_heap_allocator();
+    match std.io.read_to_string(a, path) {
+      SystemResult.Ok(previous) => {
+        if (previous.equals(value)) {
+          return SystemResult.Ok;
+        }
+      },
+      SystemResult.Error(_) => {}
+    };
+    return std.io.write_string(path, value);
+  }
+
+  /** Escapes a filesystem path for insertion into generated Sun string literals. */
+  function quote_path(value: ref String) void {
+    value.replace("\\", "\\\\");
+    value.replace("\"", "\\\"");
+  }
+
+  /** Records compiler and source provenance and generates test path constants. */
+  function prepare() SystemResult<String> {
+    var a = make_heap_allocator();
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg("build/generated");
+    mkdir.add_arg("tmp");
+    try run(mkdir);
+    var pwd = std.process.Command(a, "pwd");
+    var root = try capture(pwd);
+    var executable = compiler();
+    var locate = std.process.Command(a, "which");
+    locate.add_arg(executable);
+    var compiler_path = try capture(locate);
+    var template_path = String("tests/build_config.sun.in");
+    var template = try std.io.read_to_string(a, template_path);
+    var build = root.clone(a);
+    build.append("/build");
+    quote_path(root);
+    quote_path(build);
+    quote_path(compiler_path);
+    var root_key = String("@WORKSPACE_ROOT@");
+    template.replace(root_key, root);
+    var build_key = String("@BUILD_DIR@");
+    template.replace(build_key, build);
+    var compiler_key = String("@SUN_COMPILER@");
+    template.replace(compiler_key, compiler_path);
+    var config_path = String("build/test-config.sun");
+    try write(config_path, template);
+    var version = std.process.Command(a, executable);
+    version.add_arg("--version");
+    var text = try capture(version);
+    var version_path = String("build/sun-version.txt");
+    try write(version_path, text);
+    return SystemResult.Ok(text);
+  }
+
+  /** Builds the generator, regenerates bindings, and compiles Sun bundles and programs. */
+  public function build() SystemResult<void> {
+    var a = make_heap_allocator();
+    var version = try prepare();
+    var generator = try compile(false);
+    generator.add_arg("-lglib-2.0");
+    generator.add_arg("-c");
+    generator.add_arg("-o");
+    generator.add_arg("build/sun-gir");
+    generator.add_arg("src/generator/main.sun");
+    try run(generator);
+    var revision_command = std.process.Command(a, "git");
+    revision_command.add_arg("rev-parse");
+    revision_command.add_arg("HEAD");
+    var revision = match capture(revision_command) {
+      SystemResult.Ok(value) => value,
+      SystemResult.Error(_) => String("unversioned")
+    };
+    // Hash a sorted source list so local edits are recorded in provenance.
+    var sorted = std.process.Command(a, "sh");
+    sorted.add_arg("-eu");
+    sorted.add_arg("-c");
+    sorted.add_arg("LC_ALL=C; export LC_ALL; sha256sum src/generator/*.sun > tmp/generator-sources.sha256; sha256sum tmp/generator-sources.sha256");
+    var hash_output = try capture(sorted);
+    var words = hash_output.split_whitespace(a);
+    revision.append(":sources-sha256=");
+    revision.append(words[0]);
+    var generate = std.process.Command(a, "build/sun-gir");
+    generate.add_arg("--selection");
+    generate.add_arg("bindings/selection.xml");
+    generate.add_arg("--overrides");
+    generate.add_arg("bindings/overrides.xml");
+    generate.add_arg("--output-dir");
+    generate.add_arg("build/generated");
+    generate.add_arg("--support-dir");
+    generate.add_arg("src");
+    generate.add_arg("--target");
+    generate.add_arg("x86_64-linux-gnu");
+    generate.add_arg("--sun-revision");
+    generate.add_arg(version);
+    generate.add_arg("--generator-revision");
+    generate.add_arg(revision);
+    try run(generate);
+    var core = try compile(false);
+    core.add_arg("--emit-moon");
+    core.add_arg("-o");
+    core.add_arg("build/sun_gobject.moon");
+    core.add_arg("build/generated/sun_gobject.sun");
+    try run(core);
+    var gtk = try compile(false);
+    gtk.add_arg("--emit-moon");
+    gtk.add_arg("-o");
+    gtk.add_arg("build/sun_gtk.moon");
+    gtk.add_arg("build/generated/sun_gtk.sun");
+    try run(gtk);
+    var demo = try compile(true);
+    demo.add_arg("-lsun_gobject_native");
+    demo.add_arg("-c");
+    demo.add_arg("-o");
+    demo.add_arg("build/gtk-demo");
+    demo.add_arg("examples/gtk-demo.sun");
+    try run(demo);
+    var tests = try compile(true);
+    tests.add_arg("-lsun_gobject_test_support");
+    tests.add_arg("-c");
+    tests.add_arg("-o");
+    tests.add_arg("build/sun-gobject-tests");
+    tests.add_arg("tests/main.sun");
+    try run(tests);
+    return SystemResult.Ok;
+  }
+
+  /** Installs Sun products alongside the independently installed native library. */
+  public function install(prefix: ref String) SystemResult<void> {
+    var a = make_heap_allocator();
+    var native = std.process.Command(a, "cmake");
+    native.add_arg("--install");
+    native.add_arg("build/native");
+    native.add_arg("--prefix");
+    native.add_arg(prefix);
+    try run(native);
+    var lib = prefix.clone(a);
+    lib.append("/lib/sun");
+    var bin = prefix.clone(a);
+    bin.append("/bin");
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg(lib);
+    mkdir.add_arg(bin);
+    try run(mkdir);
+    var bundles = std.process.Command(a, "install");
+    bundles.add_arg("-m644");
+    bundles.add_arg("build/sun_gobject.moon");
+    bundles.add_arg("build/sun_gtk.moon");
+    bundles.add_arg(lib);
+    try run(bundles);
+    var generator = std.process.Command(a, "install");
+    generator.add_arg("-m755");
+    generator.add_arg("build/sun-gir");
+    generator.add_arg(bin);
+    try run(generator);
+    return SystemResult.Ok;
+  }
+}
+
+/** Dispatches Sun-only build, test, or installation work from the workspace root. */
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+  var a = make_heap_allocator();
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  var result: SystemResult<void> = SystemResult.Ok;
+  if (args.size() == 1 or (args.size() == 2 and args[1].equals_literal("build"))) {
+    result = build_tasks.build();
+  } else if (args.size() == 3 and args[1].equals_literal("install")) {
+    result = build_tasks.install(args[2]);
+  } else if (args.size() == 2 and args[1].equals_literal("test")) {
+    var tests = std.process.Command(a, "build/sun-gobject-tests_test");
+    match tests.status() {
+      SystemResult.Ok(status) => {
+        return status;
+      },
+      SystemResult.Error(error) => {
+        eprintln(error.message());
+        return 1;
+      }
+    };
+  } else {
+    eprintln("Usage: sun tools/build.sun -- [build|test|install PREFIX]");
+    return 1;
+  }
+  return match result {
+    SystemResult.Ok => 0,
+    SystemResult.Error(error) => {
+      eprintln(error.message());
+      return 1;
+    }
+  };
+}
+manifest { libraries: ["stdlib.moon"] }

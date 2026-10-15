@@ -1,0 +1,30 @@
+{
+  "name": "Sun GObject",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile"
+  },
+  "remoteUser": "ubuntu",
+  "updateRemoteUserUID": true,
+  "mounts": [
+    "source=vscode-user-data,target=/home/ubuntu/.vscode-server/data/User,type=volume",
+    "source=sun-gobject-ccache,target=/home/ubuntu/.cache/ccache,type=volume"
+  ],
+  "containerEnv": {
+    "CTEST_PARALLEL_LEVEL": "4",
+    "CCACHE_MAXSIZE": "10G"
+  },
+  "postCreateCommand": "sudo chown ubuntu:ubuntu /home/ubuntu/.cache/ccache && ./scripts/bootstrap-sun.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "namo-robotics.sun-language",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "llvm-vs-code-extensions.lldb-dap",
+        "ms-vscode.cmake-tools",
+        "Anthropic.claude-code",
+        "openai.chatgpt"
+      ]
+    }
+  }
+}

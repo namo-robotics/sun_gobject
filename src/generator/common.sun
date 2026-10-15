@@ -1,0 +1,57 @@
+using std;
+/** Provides diagnostic, byte-string, and file helpers for the generator. */
+public module sg {
+  /** Terminates the generator after a fatal diagnostic. */
+  extern "C" function exit(code: i32) void;
+
+  /** Prints a runtime diagnostic and terminates with failure. */
+  public function fail(message: const ref String) void {
+    eprintln(message);
+    unsafe { exit(1); };
+  }
+
+  /** Prints a literal diagnostic and terminates with failure. */
+  public function die(message: static_ptr<u8>) void {
+    eprintln(message);
+    unsafe { exit(1); };
+  }
+
+  /** Reads one byte, returning zero outside the string bounds. */
+  public function byte(s: const ref String, i: i64) u8 {
+    return match s.at(i) {
+      AccessResult.Ok(v) => v,
+      AccessResult.OutOfBounds(e) => 0
+    };
+  }
+
+  /** Copies a validated byte range into a new owned string. */
+  public function slice(s: const ref String, start: i64, length: i64) String {
+    var alloc = make_heap_allocator();
+    return match s.substr(alloc, start, length) {
+      AccessResult.Ok(v) => v,
+      AccessResult.OutOfBounds(e) => String(alloc, "")
+    };
+  }
+
+  /** Reads a complete file or terminates with the failing path. */
+  public function read(path: ref String) String {
+    var alloc = make_heap_allocator();
+    return match std.io.read_to_string(alloc, path) {
+      SystemResult.Ok(v) => v,
+      SystemResult.Error(e) => {
+        fail(path);
+        return String(alloc, "");
+      }
+    };
+  }
+
+  /** Writes generated content or terminates with the failing path. */
+  public function write(path: ref String, value: ref String) void {
+    match std.io.write_string(path, value) {
+      SystemResult.Ok => {},
+      SystemResult.Error(e) => {
+        fail(path);
+      }
+    };
+  }
+}

@@ -1,0 +1,282 @@
+using std;
+using sg;
+/** Parses generator options, validates selected declarations, and writes deterministic artifacts. */
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+  var a = make_heap_allocator();
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  var repo = gir.Repository();
+  var selection = String("");
+  var output = String("");
+  var target = String("");
+  var sun_revision = String("unknown");
+  var revision = String("unknown");
+  var support = String("");
+  var overrides = String("");
+  for (var i: i64 = 1; i < args.size(); i += 1) {
+    if (args[i].equals_literal("--check-xml")) {
+      if (i + 1 >= args.size()) {
+        die("--check-xml requires a path");
+      }
+      var path = args[i + 1].clone(a);
+      var data = read(path);
+      var doc = xml.Document(data, path);
+      doc.parse();
+      println("XML OK");
+      return 0;
+    }
+    if (i + 1 >= args.size()) {
+      die("option requires a value");
+    }
+    var value = args[i + 1].clone(a);
+    if (args[i].equals_literal("--gir-dir")) {
+      repo.dirs.push(value);
+    } else if (args[i].equals_literal("--selection")) {
+      selection = value;
+    } else if (args[i].equals_literal("--output-dir")) {
+      output = value;
+    } else if (args[i].equals_literal("--target")) {
+      target = value;
+    } else if (args[i].equals_literal("--sun-revision")) {
+      sun_revision = value;
+    } else if (args[i].equals_literal("--generator-revision")) {
+      revision = value;
+    } else if (args[i].equals_literal("--support-dir")) {
+      support = value;
+    } else if (args[i].equals_literal("--overrides")) {
+      overrides = value;
+    } else {
+      fail(args[i]);
+    }
+    i += 1;
+  }
+  if (selection.length() == 0 or output.length() == 0 or target.equals_literal("x86_64-linux-gnu") == false) {
+    die("usage: sun-gir --selection FILE --output-dir DIR --target x86_64-linux-gnu [--gir-dir DIR ...] [--support-dir DIR] [--overrides FILE]");
+  }
+  repo.dirs.push(String("/usr/share/gir-1.0"));
+  var selection_data = read(selection);
+  var selection_hash = gir.sha256(selection_data);
+  var selected = xml.Document(selection_data, selection);
+  selected.parse();
+  for (var i: i64 = 0; i < selected.nodes.size(); i += 1) {
+    if (selected.nodes[i].name.equals_literal("namespace")) {
+      var name = selected.nodes[i].attr("name");
+      var version = selected.nodes[i].attr("version");
+      repo.load(name, version);
+    }
+  }
+  var override_hash = String("");
+  if (overrides.length() > 0) {
+    var contents = read(overrides);
+    override_hash = gir.sha256(contents);
+    var patches = xml.Document(contents, overrides);
+    patches.parse();
+    for (var p: i64 = 1; p < patches.nodes.size(); p += 1) {
+      if (patches.nodes[p].name.equals_literal("set") == false) {
+        die("unknown metadata override");
+      }
+      var symbol = patches.nodes[p].attr("symbol");
+      var key = patches.nodes[p].attr("attribute");
+      var value = patches.nodes[p].attr("value");
+      var matches: i64 = 0;
+      for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
+        for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
+          var id = repo.docs[d].nodes[n].attr("c:identifier");
+          if (id.equals(symbol)) {
+            matches += 1;
+            var changed = false;
+            for (var j: i64 = 0; j < repo.docs[d].nodes[n].attributes.size(); j += 1) {
+              if (repo.docs[d].nodes[n].attributes[j].name.equals(key)) {
+                repo.docs[d].nodes[n].attributes[j].value = value.clone(a);
+                changed = true;
+              }
+            }
+            if (changed == false) {
+              repo.docs[d].nodes[n].attributes.push(xml.Attribute(key.clone(a), value.clone(a)));
+            }
+          }
+        }
+      }
+      if (matches != 1) {
+        die("override must match exactly one declaration");
+      }
+    }
+  }
+  var files = Vec<String>(a, 8);
+  var contents = Vec<String>(a, 8);
+  var coverage = String("namespace\tsymbol\tstatus\treason\n");
+  for (var s: i64 = 0; s < selected.nodes.size(); s += 1) {
+    if (selected.nodes[s].name.equals_literal("namespace") == false) {
+      continue;
+    }
+    var ns = selected.nodes[s].attr("name");
+    var version = selected.nodes[s].attr("version");
+    var module_name = selected.nodes[s].attr("module");
+    // Restrict module/output names to identifiers to prevent code/path injection.
+    for (var i: i64 = 0; i < module_name.length(); i += 1) {
+      var c = byte(module_name, i);
+      if ((c >= 97 and c <= 122) == false and c != 95) {
+        die("invalid module name");
+      }
+    }
+    if (module_name.length() == 0) {
+      die("empty module name");
+    }
+    var key = ns.clone(a);
+    key.append("-");
+    key.append(version);
+    var d: i64 = -1;
+    for (var k: i64 = 0; k < repo.keys.size(); k += 1) {
+      if (repo.keys[k].equals(key)) {
+        d = k;
+      }
+    }
+    if (d < 0) {
+      die("namespace not loaded");
+    }
+    var source = String("// Generated by sun-gir. Do not edit. Raw calls require unsafe.\npublic module ");
+    source.append(module_name);
+    source.append(".raw {\n");
+    source.append("    _assert_c_target(\"x86_64-pc-linux-gnu\");\n");
+    var emitted = Vec<String>(a, 32);
+    for (var f = s + 1; f < selected.nodes.size(); f += 1) {
+      if (selected.nodes[f].parent != s) {
+        continue;
+      }
+      var symbol = selected.nodes[f].attr("symbol");
+      for (var k: i64 = 0; k < emitted.size(); k += 1) {
+        if (emitted[k].equals(symbol)) {
+          die("duplicate selected symbol");
+        }
+      }
+      var found: i64 = -1;
+      for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
+        var id = repo.docs[d].nodes[n].attr("c:identifier");
+        if (id.equals(symbol)) {
+          found = n;
+          break;
+        }
+      }
+      if (found < 0) {
+        var error = String("selected symbol not found: ");
+        error.append(symbol);
+        fail(error);
+      }
+      var decl = gir.declaration(repo, repo.docs[d], found);
+      source.append(decl);
+      emitted.push(symbol);
+    }
+    for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
+      var id = repo.docs[d].nodes[n].attr("c:identifier");
+      if (id.length() == 0) {
+        continue;
+      }
+      var chosen = false;
+      for (var k: i64 = 0; k < emitted.size(); k += 1) {
+        if (emitted[k].equals(id)) {
+          chosen = true;
+        }
+      }
+      coverage.append(ns);
+      coverage.append("\t");
+      coverage.append(id);
+      coverage.append(chosen ? "\temitted\tselected and representable\n" : "\tunselected\toutside curated surface; ABI support not evaluated\n");
+    }
+    source.append("}\n");
+    var filename = module_name.clone(a);
+    filename.append(".sun");
+    files.push(filename);
+    contents.push(source);
+  }
+  // Preserve the full parsed GIR tree as JSON, including ownership, callback scope,
+  // array lengths, properties, signals, inheritance and dependency types.
+  var model = String("[\n");
+  for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
+    if (d > 0) {
+      model.append(",\n");
+    }
+    model.append("{\"namespace\":");
+    var key = gir.quote(repo.keys[d]);
+    model.append(key);
+    model.append(",\"nodes\":[");
+    for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
+      if (n > 0) {
+        model.append(",");
+      }
+      model.append("{\"tag\":");
+      var tag = gir.quote(repo.docs[d].nodes[n].name);
+      model.append(tag);
+      model.append(",\"parent\":");
+      model.append(repo.docs[d].nodes[n].parent);
+      model.append(",\"attributes\":{");
+      for (var k: i64 = 0; k < repo.docs[d].nodes[n].attributes.size(); k += 1) {
+        if (k > 0) {
+          model.append(",");
+        }
+        var name = gir.quote(repo.docs[d].nodes[n].attributes[k].name);
+        var value = gir.quote(repo.docs[d].nodes[n].attributes[k].value);
+        model.append(name);
+        model.append(":");
+        model.append(value);
+      }
+      model.append("}}");
+    }
+    model.append("]}");
+  }
+  model.append("\n]\n");
+  var provenance = String("{\"target\":");
+  var q = gir.quote(target);
+  provenance.append(q);
+  provenance.append(",\"sun_revision\":");
+  q = gir.quote(sun_revision);
+  provenance.append(q);
+  provenance.append(",\"generator_revision\":");
+  q = gir.quote(revision);
+  provenance.append(q);
+  provenance.append(",\"selection_sha256\":");
+  q = gir.quote(selection_hash);
+  provenance.append(q);
+  provenance.append(",\"overrides_sha256\":");
+  q = gir.quote(override_hash);
+  provenance.append(q);
+  provenance.append(",\"gir\":{");
+  for (var k: i64 = 0; k < repo.keys.size(); k += 1) {
+    if (k > 0) {
+      provenance.append(",");
+    }
+    q = gir.quote(repo.keys[k]);
+    provenance.append(q);
+    provenance.append(":");
+    q = gir.quote(repo.hashes[k]);
+    provenance.append(q);
+  }
+  provenance.append("}}\n");
+  files.push(String("coverage.tsv"));
+  contents.push(coverage);
+  files.push(String("gir-model.json"));
+  contents.push(model);
+  files.push(String("provenance.json"));
+  contents.push(provenance);
+  if (support.length() > 0) {
+    var core = String("manifest { source_files: [\"glib.sun\", \"gobject.sun\", \"gio.sun\", ");
+    var path = support.clone(a);
+    path.append("/support.sun");
+    q = gir.quote(path);
+    core.append(q);
+    core.append("] libraries: [\"stdlib.moon\"] }\n");
+    files.push(String("sun_gobject.sun"));
+    contents.push(core);
+    files.push(String("sun_gtk.sun"));
+    contents.push(String("manifest { source_files: [\"gtk.sun\"] libraries: [\"sun_gobject.moon\", \"stdlib.moon\"] }\n"));
+  }
+  // Validate every declaration before touching output files.
+  for (var i: i64 = 0; i < files.size(); i += 1) {
+    var path = output.clone(a);
+    path.append("/");
+    path.append(files[i]);
+    write(path, contents[i]);
+  }
+  println("GIR generation complete");
+  return 0;
+}
+manifest { source_files: ["common.sun", "xml.sun", "gir.sun"] libraries: ["stdlib.moon"] }

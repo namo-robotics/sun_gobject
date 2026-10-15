@@ -1,0 +1,9 @@
+/** Supplies paths selected by the Sun build driver to the native integration tests. */
+module test_build {
+  /** Returns the configured build directory. */
+  public function directory() static_ptr<u8> { return "@BUILD_DIR@"; }
+  /** Returns the selected Sun compiler. */
+  public function compiler() static_ptr<u8> { return "@SUN_COMPILER@"; }
+  /** Returns the workspace containing fixtures and scratch files. */
+  public function root() static_ptr<u8> { return "@WORKSPACE_ROOT@"; }
+}

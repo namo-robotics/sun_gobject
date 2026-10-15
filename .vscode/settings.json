@@ -1,0 +1,27 @@
+{
+  "cmake.buildDirectory": "${workspaceFolder}/build/native",
+  "cmake.configureOnOpen": false,
+  "clangd.arguments": [
+    "--background-index",
+    "--compile-commands-dir=${workspaceFolder}/build/native"
+  ],
+  "sun.sun_path": [
+    "/usr/lib/sun",
+    "build"
+  ],
+  "files.watcherExclude": {
+    "**/.toolchain/**": true,
+    "**/build/**": true
+  },
+  "sun.lsp_path": "/usr/bin/sun-lsp",
+  "sun.compiler_path": "scripts/sun-test-compiler.sh",
+  "sun.sun_configs": [
+    "sun-config.json"
+  ],
+  "sun.syntaxOnly": false,
+  "[sun]": {
+    "editor.defaultFormatter": "namo-robotics.sun-language",
+    "editor.formatOnSave": true
+  },
+  "cmake.sourceDirectory": "${workspaceFolder}/native"
+}

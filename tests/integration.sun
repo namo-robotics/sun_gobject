@@ -1,0 +1,28 @@
+using std;
+/** Exercises the installed consumer and the real GTK demo through native tests. */
+module integration_tests {
+  /** Builds and runs a consumer using only a separately installed bundle. */
+  test_function installed_consumer() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var installed = try checks.command(fixture, "exec \"$3\" \"$4/tools/build.sun\" -- install \"$1/install\"");
+    try checks.success(installed);
+    var source = String("using std;\n/** Confirms a separately installed bundle can own and release a GObject. */\nfunction main() i32 {\n var object = gobject.OwnedObject(unsafe { gio.raw.g_simple_action_new(\"consumer\", null); });\n if (gobject.get_boolean(object.borrow(), \"enabled\") == false) { return 1; }\n return 0;\n}\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\"] }\n");
+    var path = fixture.file("consumer.sun");
+    try checks.write(path, source);
+    var config = String("{\"root\":true}");
+    var config_path = fixture.file("sun-config.json");
+    try checks.write(config_path, config);
+    var compiled = try checks.command(fixture, "unset SUN_PATH; exec \"$3\" --dynamic --lib-path \"$1/install/lib/sun\" -L\"$1/install/lib\" -lsun_gobject_native -lgio-2.0 -lgobject-2.0 -lglib-2.0 -c -o \"$1/consumer\" \"$1/consumer.sun\"");
+    try checks.success(compiled);
+    var executed = try checks.command(fixture, "exec env LD_LIBRARY_PATH=\"$1/install/lib\" \"$1/consumer\"");
+    try checks.success(executed);
+  }
+
+  /** Checks GTK signals, labels, window teardown, and callback cleanup under Xvfb. */
+  test_function gtk_button_interaction() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var output = try checks.command(fixture, "exec env LD_LIBRARY_PATH=\"$2/native\" G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a \"$2/gtk-demo\" --self-test");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("GTK acceptance passed"));
+  }
+}

@@ -1,0 +1,8 @@
+/** A nullable C function pointer is currently not expressible in Sun. */
+extern "C" function accepts_optional(callback: function (i32) void) void;
+
+/** Isolates the compiler rejection without linking a native library. */
+function main() i32 {
+  unsafe { accepts_optional(null); };
+  return 0;
+}

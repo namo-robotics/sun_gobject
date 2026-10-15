@@ -1,0 +1,91 @@
+using std;
+/** Runs a GTK application using the generated bindings and named callbacks. */
+module demo {
+  var automated: bool = false;
+  var clicked: bool = false;
+  var cleaned: i32 = 0;
+  var application: raw_ptr<u8> = null;
+  /** Invokes a no-argument signal only in the automated acceptance test. */
+  extern "C" function g_signal_emit_by_name(instance: raw_ptr<u8>, name: raw_ptr<u8>, ...) void;
+
+  /** Records release of callback state; this demo owns no heap userdata. */
+  function cleanup(data: raw_ptr<u8>) void {
+    cleaned += 1;
+  }
+
+  /** Changes the button label and exits automatically during acceptance tests. */
+  function on_clicked(button: raw_ptr<u8>, data: raw_ptr<u8>) void {
+    clicked = true;
+    unsafe { gtk.raw.gtk_button_set_label(button, "Hello from Sun!"); };
+    var a = make_heap_allocator();
+    var label = from_c_str(a, unsafe { gtk.raw.gtk_button_get_label(button); });
+    if (label.equals_literal("Hello from Sun!") == false) {
+      clicked = false;
+    }
+    if (automated) {
+      unsafe { gio.raw.g_application_quit(application); };
+    }
+  }
+
+  /** Creates the window and connects the button with a typed C adapter. */
+  function activate(app: raw_ptr<u8>, data: raw_ptr<u8>) void {
+    var window = unsafe { gtk.raw.gtk_application_window_new(app); };
+    var button = unsafe { gtk.raw.gtk_button_new_with_label("Click me"); };
+    unsafe {
+      gtk.raw.gtk_window_set_title(window, "Sun GObject");
+      gtk.raw.gtk_window_set_default_size(window, 420, 240);
+      gtk.raw.gtk_window_set_child(window, button);
+      gobject.signals.sg_connect_void(button, "clicked", on_clicked, null, cleanup);
+      gtk.raw.gtk_window_present(window);
+    };
+    gobject.set_string(button, "label", "Click me");
+    match gobject.get_string(button, "label") {
+      Option.Some(label) => {
+        if (label.equals_literal("Click me") == false) {
+          unsafe { gio.raw.g_application_quit(app); };
+          return;
+        }
+      },
+      Option.None => {
+        unsafe { gio.raw.g_application_quit(app); };
+        return;
+      }
+    };
+    if (automated) {
+      // Process the initial display work before exercising the signal.
+      for (var i: i32 = 0; i < 20; i += 1) {
+        unsafe { glib.raw.g_main_context_iteration(null, 0); };
+      }
+      unsafe { g_signal_emit_by_name(button, "clicked"); gtk.raw.gtk_window_destroy(window); };
+    }
+  }
+
+  /** Owns the application and verifies the automated button interaction. */
+  public function run(self_test: bool) i32 {
+    automated = self_test;
+    application = unsafe { gtk.raw.gtk_application_new("org.sunlang.GObjectDemo", 32); };
+    var app = gobject.OwnedObject(application);
+    var id = unsafe { gobject.signals.sg_connect_void(application, "activate", activate, null, cleanup); };
+    if (id == 0) {
+      return 1;
+    }
+    var status = unsafe { gio.raw.g_application_run(application, 0, null); };
+    unsafe { gobject.raw.g_signal_handler_disconnect(application, id); };
+    if (automated and (clicked == false or cleaned != 2)) {
+      eprintln("GTK acceptance failed");
+      return 1;
+    }
+    if (automated) {
+      println("GTK acceptance passed");
+    }
+    return status;
+  }
+}
+/** Starts either the interactive demo or its bounded CI acceptance scenario. */
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+  var a = make_heap_allocator();
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  return demo.run(args.size() == 2 and args[1].equals_literal("--self-test"));
+}
+manifest { libraries: ["stdlib.moon", "sun_gobject.moon", "sun_gtk.moon"] }

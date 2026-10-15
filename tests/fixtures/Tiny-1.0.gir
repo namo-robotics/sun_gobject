@@ -1,0 +1,14 @@
+<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0" version="1.2">
+  <namespace name="Tiny" version="1.0">
+    <class name="Object" c:type="TinyObject" parent="GObject.Object">
+      <property name="enabled" writable="1" transfer-ownership="none"><type name="gboolean" c:type="gboolean"/></property>
+    </class>
+    <function name="increment" c:identifier="tiny_increment">
+      <return-value transfer-ownership="none"><type name="gint" c:type="gint"/></return-value>
+      <parameters><parameter name="value" transfer-ownership="none"><type name="gint" c:type="gint"/></parameter></parameters>
+    </function>
+    <function name="unsupported" c:identifier="tiny_unsupported">
+      <return-value><type name="Mystery" c:type="Mystery"/></return-value>
+    </function>
+  </namespace>
+</repository>

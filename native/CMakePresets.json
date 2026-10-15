@@ -1,0 +1,22 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "dev-fast",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../build/native",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_C_FLAGS": "-O2 -g -fno-omit-frame-pointer"
+      }
+    },
+    {
+      "name": "dev-debug",
+      "inherits": "dev-fast",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-O0 -g3 -fno-omit-frame-pointer"
+      }
+    }
+  ]
+}

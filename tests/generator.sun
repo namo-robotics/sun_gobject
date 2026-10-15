@@ -1,0 +1,254 @@
+using std;
+/** Checks XML validation and GIR generation through the public command line. */
+module generator_tests {
+  /** Generates fixtures, preferring any locally modified input files. */
+  function generate(fixture: ref checks.Fixture) checks.Result<std.process.Output> {
+    return checks.command(fixture, "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun-gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture");
+  }
+
+  /** Reads an input fixture from the repository. */
+  function input(name: static_ptr<u8>) checks.Result<String> {
+    var path = String(test_build.root());
+    path.append("/tests/fixtures/");
+    path.append(name);
+    return checks.read(path);
+  }
+
+  /** Checks XML acceptance and numeric line and column diagnostics on rejection. */
+  function xml(fixture: ref checks.Fixture, content: ref String, accepted: bool) checks.Result<void> {
+    var path = fixture.file("input.xml");
+    try checks.write(path, content);
+    var output = try checks.command(fixture, "exec \"$2/sun-gir\" --check-xml \"$1/input.xml\"");
+    try std.test.assert_eq(output.status() == 0, accepted);
+    if (accepted == false) {
+      var diagnostic: ref String = output.stderr();
+      var start = match diagnostic.find("input.xml:") {
+        Option.Some(index) => index,
+        Option.None => -1
+      };
+      try std.test.assert(start >= 0, "diagnostic includes the source filename");
+      var offset = start + 10;
+      for (var field: i32 = 0; field < 2; field += 1) {
+        var digits: i64 = 0;
+        while (offset < diagnostic.length()) {
+          var byte = try diagnostic.at(offset);
+          if (byte < b'0' or byte > b'9') {
+            break;
+          }
+          digits += 1;
+          offset += 1;
+        }
+        try std.test.assert(digits > 0, "diagnostic includes a numeric source location");
+        try std.test.assert_eq(try diagnostic.at(offset), b':');
+        offset += 1;
+      }
+    }
+    return checks.Result.Ok;
+  }
+
+  /** Accepts text, entity references, declarations, CDATA, and Unicode. */
+  test_function valid_xml() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var content = try input("xml-valid.xml");
+    try xml(fixture, content, true);
+    var unicode = String("<r a=\"&#x1F600;&#65;\">é &amp; <![CDATA[<>]]></r>");
+    try xml(fixture, unicode, true);
+  }
+
+  /** Rejects malformed structure, entities, encodings, and unsafe declarations. */
+  test_function malformed_xml() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var a = make_heap_allocator();
+    var cases = Vec<String>(a, 16);
+    cases.push(String("<r>"));
+    cases.push(String("<r></wrong>"));
+    cases.push(String("<r/><s/>"));
+    cases.push(String("<r a=\"1\"a=\"2\"/>"));
+    cases.push(String("<r a=\"1\" a=\"2\"/>"));
+    cases.push(String("<r>&unknown;</r>"));
+    cases.push(String("<r>&#0;</r>"));
+    cases.push(String("<r>&#xD800;</r>"));
+    cases.push(String("<r>&#99999999;</r>"));
+    cases.push(String("<!DOCTYPE r SYSTEM \"file:///etc/passwd\"><r/>"));
+    cases.push(String("<r><!-- bad -- comment --></r>"));
+    cases.push(String("<r>]]></r>"));
+    cases.push(String("<r a=\"<\"/>"));
+    var overlong = String("<r>");
+    overlong.append_char(192);
+    overlong.append_char(128);
+    overlong.append("</r>");
+    cases.push(overlong);
+    var truncated = String("<r>");
+    truncated.append_char(240);
+    truncated.append_char(144);
+    truncated.append("</r>");
+    cases.push(truncated);
+    var nul = String("<r>");
+    nul.append_char(0);
+    nul.append("</r>");
+    cases.push(nul);
+    for (var content: ref String in cases) {
+      try xml(fixture, content, false);
+    }
+  }
+
+  /** Verifies the source golden, compilation, metadata, hashes, and repeatability. */
+  test_function generation() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var result = try generate(fixture);
+    try checks.success(result);
+    var path = fixture.file("tiny.sun");
+    var source = try checks.read(path);
+    var golden = try input("tiny.expected.sun");
+    try std.test.assert_eq(source, golden);
+    var compiled = try checks.command(fixture, "\"$3\" --emit-moon -o \"$1/tiny.moon\" \"$1/tiny.sun\"");
+    try checks.success(compiled);
+    var snapshot_allocator = make_heap_allocator();
+    var entries = try std.test.expect_system(std.io.read_dir(snapshot_allocator, fixture.path));
+    var contents = Vec<String>(snapshot_allocator, entries.size());
+    for (var entry: ref std.io.DirEntry in entries) {
+      var file_path = fixture.path.clone(snapshot_allocator);
+      file_path.append("/");
+      file_path.append(entry.name());
+      contents.push(try checks.read(file_path));
+    }
+    var again = try generate(fixture);
+    try checks.success(again);
+    var after = try std.test.expect_system(std.io.read_dir(snapshot_allocator, fixture.path));
+    try std.test.assert_eq(after.size(), entries.size());
+    for (var i: i64 = 0; i < entries.size(); i += 1) {
+      var file_path = fixture.path.clone(snapshot_allocator);
+      file_path.append("/");
+      file_path.append((try entries.get(i)).name());
+      var content = try checks.read(file_path);
+      try std.test.assert_eq(try contents.get(i), content);
+    }
+    var a = make_heap_allocator();
+    var model_path = fixture.file("gir-model.json");
+    var model = try std.test.expect_json(parse_json(a, try checks.read(model_path)));
+    var nodes: ref Json = try (try model.at(0)).get("nodes");
+    var parent_found = false;
+    for (var i: i64 = 0; i < nodes.len(); i += 1) {
+      var attrs: ref Json = try (try nodes.at(i)).get("attributes");
+      if (attrs.has("parent")) {
+        if ((try (try attrs.get("parent")).as_string()).equals_literal("GObject.Object")) {
+          parent_found = true;
+        }
+      }
+    }
+    try std.test.assert(parent_found, "inheritance metadata retained");
+    var provenance_path = fixture.file("provenance.json");
+    var provenance = try std.test.expect_json(parse_json(a, try checks.read(provenance_path)));
+    try std.test.assert_eq((try (try (try provenance.get("gir")).get("Tiny-1.0")).as_string()).length(), 64);
+    var coverage_path = fixture.file("coverage.tsv");
+    var coverage = try checks.read(coverage_path);
+    try std.test.assert(coverage.contains("tiny_unsupported\tunselected"));
+  }
+
+  /** Rejects unsupported selections before replacing previous generated sources. */
+  test_function unsupported_selected_preserves_output() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var result = try generate(fixture);
+    try checks.success(result);
+    var path = fixture.file("tiny.sun");
+    var before = try checks.read(path);
+    var selection = try input("selection.xml");
+    selection.replace("tiny_increment", "tiny_unsupported");
+    var selected = fixture.file("selection.xml");
+    try checks.write(selected, selection);
+    var rejected = try generate(fixture);
+    try std.test.assert_ne(rejected.status(), 0);
+    try std.test.assert(rejected.stderr().contains("unsupported selected type"));
+    var after = try checks.read(path);
+    try std.test.assert_eq(before, after);
+  }
+
+  /** Resolves dependency enum ABI and retains callback and ownership annotations. */
+  test_function recursive_dependency() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var source = try input("Tiny-1.0.gir");
+    source.replace("<namespace name=\"Tiny\"", "<include name=\"TinyDep\" version=\"1.0\"/><namespace name=\"Tiny\"");
+    source.replace("name=\"gint\" c:type=\"gint\"", "name=\"TinyDep.Flags\" c:type=\"TinyFlags\"");
+    source.replace("name=\"value\" transfer-ownership=\"none\"", "name=\"value\" transfer-ownership=\"full\" nullable=\"1\" scope=\"notified\" closure=\"1\" destroy=\"2\"");
+    var gir = fixture.file("Tiny-1.0.gir");
+    try checks.write(gir, source);
+    var result = try generate(fixture);
+    try checks.success(result);
+    var path = fixture.file("tiny.sun");
+    var generated = try checks.read(path);
+    try std.test.assert(generated.contains("tiny_increment(arg0: u32) u32;"));
+    var a = make_heap_allocator();
+    var model_path = fixture.file("gir-model.json");
+    var model = try std.test.expect_json(parse_json(a, try checks.read(model_path)));
+    try std.test.assert_eq(model.len(), 2);
+    var nodes: ref Json = try (try model.at(0)).get("nodes");
+    var found = false;
+    for (var i: i64 = 0; i < nodes.len(); i += 1) {
+      var node: ref Json = try nodes.at(i);
+      var parameter = false;
+      if (true) {
+        parameter = (try (try node.get("tag")).as_string()).equals_literal("parameter");
+      }
+      if (parameter and found == false) {
+        var attrs: ref Json = try node.get("attributes");
+        try std.test.assert((try (try attrs.get("transfer-ownership")).as_string()).equals_literal("full"));
+        try std.test.assert((try (try attrs.get("nullable")).as_string()).equals_literal("1"));
+        try std.test.assert((try (try attrs.get("scope")).as_string()).equals_literal("notified"));
+        try std.test.assert((try (try attrs.get("closure")).as_string()).equals_literal("1"));
+        try std.test.assert((try (try attrs.get("destroy")).as_string()).equals_literal("2"));
+        found = true;
+      }
+    }
+    try std.test.assert(found, "parameter metadata retained");
+  }
+
+  /** Resolves namespace URIs and rejects unbound or duplicate expanded names. */
+  test_function namespace_prefixes() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var unbound = String("<r><missing:child/></r>");
+    try xml(fixture, unbound, false);
+    var duplicate = String("<r xmlns:a=\"urn:x\" xmlns:b=\"urn:x\" a:x=\"1\" b:x=\"2\"/>");
+    try xml(fixture, duplicate, false);
+    var bom = String("");
+    bom.append_char(239);
+    bom.append_char(187);
+    bom.append_char(191);
+    bom.append("<r>text\r\ntext</r>");
+    try xml(fixture, bom, true);
+    var source = try input("Tiny-1.0.gir");
+    source.replace("xmlns:c=", "xmlns:native=");
+    source.replace("c:", "native:");
+    var gir = fixture.file("Tiny-1.0.gir");
+    try checks.write(gir, source);
+    var result = try generate(fixture);
+    try checks.success(result);
+    var path = fixture.file("tiny.sun");
+    var generated = try checks.read(path);
+    var golden = try input("tiny.expected.sun");
+    try std.test.assert_eq(generated, golden);
+  }
+
+  /** Rejects a GIR file whose declared version differs from the requested name. */
+  test_function dependency_version_mismatch() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var source = try input("Tiny-1.0.gir");
+    source.replace("name=\"Tiny\" version=\"1.0\"", "name=\"Tiny\" version=\"2.0\"");
+    var gir = fixture.file("Tiny-1.0.gir");
+    try checks.write(gir, source);
+    var result = try generate(fixture);
+    try std.test.assert_ne(result.status(), 0);
+    try std.test.assert(result.stderr().contains("namespace/version mismatch"));
+  }
+
+  /** Rejects a namespace version absent from the search paths. */
+  test_function missing_dependency() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var selection = try input("selection.xml");
+    selection.replace("1.0", "9.0");
+    var path = fixture.file("selection.xml");
+    try checks.write(path, selection);
+    var result = try generate(fixture);
+    try std.test.assert_ne(result.status(), 0);
+    try std.test.assert(result.stderr().contains("missing GIR dependency"));
+  }
+}

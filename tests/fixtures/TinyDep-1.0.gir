@@ -1,0 +1,5 @@
+<repository xmlns="http://www.gtk.org/introspection/core/1.0" xmlns:c="http://www.gtk.org/introspection/c/1.0">
+  <namespace name="TinyDep" version="1.0">
+    <bitfield name="Flags" c:type="TinyFlags"><member name="one" value="1" c:identifier="TINY_ONE"/></bitfield>
+  </namespace>
+</repository>

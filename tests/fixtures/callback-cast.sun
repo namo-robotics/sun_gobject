@@ -1,0 +1,11 @@
+/** Models GObject's erased GCallback signature. */
+extern "C" function accepts_erased(callback: function () void) void;
+
+/** Represents the actual signal signature. */
+function typed(value: i32) void {}
+
+/** Isolates the missing function pointer cast at the C boundary. */
+function main() i32 {
+  unsafe { accepts_erased(typed); };
+  return 0;
+}

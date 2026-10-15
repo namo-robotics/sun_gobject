@@ -1,0 +1,45 @@
+<selection>
+  <namespace name="GLib" version="2.0" module="glib">
+    <function symbol="g_strdup"/>
+    <function symbol="g_free"/>
+    <function symbol="g_error_free"/>
+    <function symbol="g_main_context_iteration"/>
+  </namespace>
+  <namespace name="GObject" version="2.0" module="gobject">
+    <function symbol="g_object_ref"/>
+    <function symbol="g_object_unref"/>
+    <function symbol="g_object_ref_sink"/>
+    <function symbol="g_object_is_floating"/>
+    <function symbol="g_signal_handler_disconnect"/>
+    <function symbol="g_signal_handler_is_connected"/>
+    <function symbol="g_object_get_property"/>
+    <function symbol="g_object_set_property"/>
+    <function symbol="g_value_init"/>
+    <function symbol="g_value_unset"/>
+    <function symbol="g_value_set_boolean"/>
+    <function symbol="g_value_get_boolean"/>
+    <function symbol="g_value_set_int"/>
+    <function symbol="g_value_get_int"/>
+    <function symbol="g_value_set_string"/>
+    <function symbol="g_value_get_string"/>
+  </namespace>
+  <namespace name="Gio" version="2.0" module="gio">
+    <function symbol="g_simple_action_new"/>
+    <function symbol="g_action_get_enabled"/>
+    <function symbol="g_simple_action_set_enabled"/>
+    <function symbol="g_application_run"/>
+    <function symbol="g_application_quit"/>
+  </namespace>
+  <namespace name="Gtk" version="4.0" module="gtk">
+    <function symbol="gtk_application_new"/>
+    <function symbol="gtk_application_window_new"/>
+    <function symbol="gtk_window_set_title"/>
+    <function symbol="gtk_window_set_default_size"/>
+    <function symbol="gtk_window_set_child"/>
+    <function symbol="gtk_window_present"/>
+    <function symbol="gtk_window_destroy"/>
+    <function symbol="gtk_button_new_with_label"/>
+    <function symbol="gtk_button_get_label"/>
+    <function symbol="gtk_button_set_label"/>
+  </namespace>
+</selection>
