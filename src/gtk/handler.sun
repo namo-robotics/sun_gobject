@@ -1,0 +1,53 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Stores a typed callback and owns its staged emitter or installed native source. */
+  class Handler<State> {
+    var number: u64;
+    var kind: u32;
+    var delay: u32;
+    var emitter: raw_ptr<u8>;
+    var source: raw_ptr<u8> = null;
+    var callback: function (ref State, ref EventContext<State>) SystemResult<void>;
+    /** Retains an emitter until this handler is installed or discarded. */
+    init(number: u64, kind: u32, delay: u32, emitter: raw_ptr<u8>, callback: function (ref State, ref EventContext<State>) SystemResult<void>) {
+      this.number = number;
+      this.kind = kind;
+      this.delay = delay;
+      this.emitter = emitter;
+      this.callback = callback;
+      if (emitter != null) {
+        unsafe { gobject.raw.g_object_ref(emitter); };
+      }
+    }
+
+    /** Disconnects native callbacks before releasing emitter storage. */
+    deinit() {
+      require_thread();
+      if (this.source != null) {
+        unsafe { sg_loop_source_free(this.source); };
+      }
+      if (this.emitter != null) {
+        unsafe { gobject.raw.g_object_unref(this.emitter); };
+      }
+    }
+
+    /** Installs the staged registration after the current callback has returned. */
+    method install(core: ref LoopCore) SystemResult<void> {
+      if (this.kind < 3) {
+        this.source = unsafe { sg_loop_connect(core.pointer, this.number, this.kind, this.emitter); };
+      } else {
+        this.source = unsafe { sg_loop_timer(core.pointer, this.number, this.delay); };
+      }
+      if (this.source == null) {
+        return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Invokes user code without lending it the registry or any registry entry. */
+    method call(state: ref State, context: ref EventContext<State>) SystemResult<void> {
+      return this.callback(state, context);
+    }
+  }
+}

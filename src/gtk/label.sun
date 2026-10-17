@@ -1,0 +1,47 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns a GTK label independently of its parent, with validated UTF-8 text. */
+  public class Label {
+    var pointer: raw_ptr<u8> = null;
+    /** Creates a label on the main thread, rejecting invalid text or unavailable displays. */
+    init(text: ref String) SystemResult<void> {
+      require_thread();
+      try validate(text);
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+      }
+      this.pointer = unsafe { gtk_label_new(text.c_str()); };
+      unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
+    }
+
+    /** Releases this wrapper's reference on the main thread. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Copies validated text into the widget. */
+    public method set_text(text: ref String) SystemResult<void> {
+      require_thread();
+      try validate(text);
+      unsafe { gtk_label_set_text(this.pointer, text.c_str()); };
+      return SystemResult.Ok;
+    }
+
+    /** Copies the current label into Sun-owned storage. */
+    public const method text() String {
+      require_thread();
+      var a = make_heap_allocator();
+      return from_c_str(a, unsafe { gtk_label_get_text(this.pointer); });
+    }
+
+    /** Borrows the handle only for code accepting GTK's native lifetime contract. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      require_thread();
+      return this.pointer;
+    }
+  }
+}

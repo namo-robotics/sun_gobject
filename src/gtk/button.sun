@@ -1,0 +1,80 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns a button reference and its click queue independently of widget parenting. */
+  public class Button {
+    var pointer: raw_ptr<u8> = null;
+    var events: raw_ptr<u8> = null;
+    /** Creates a labeled button after validating its text and initializing GTK. */
+    init(label: ref String) SystemResult<void> {
+      require_thread();
+      try validate(label);
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+      }
+      this.pointer = unsafe { raw.gtk_button_new_with_label(label.c_str()); };
+      unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
+      this.events = unsafe { sg_button_events_new(this.pointer); };
+    }
+
+    /** Disconnects native signal state before releasing the owned button. */
+    deinit() {
+      require_thread();
+      if (this.events != null) {
+        unsafe { sg_button_events_free(this.events); };
+      }
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Exposes a borrowed handle only to code accepting the unsafe FFI contract. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      require_thread();
+      return this.pointer;
+    }
+
+    /** Sets a validated label; GTK copies the supplied text. */
+    public method set_label(label: ref String) SystemResult<void> {
+      require_thread();
+      try validate(label);
+      unsafe { raw.gtk_button_set_label(this.pointer, label.c_str()); };
+      return SystemResult.Ok;
+    }
+
+    /** Copies the label into Sun-owned storage. */
+    public const method label() String {
+      require_thread();
+      var a = make_heap_allocator();
+      var text = unsafe { raw.gtk_button_get_label(this.pointer); };
+      if (text == null) {
+        return String("");
+      }
+      return from_c_str(a, text);
+    }
+
+    /** Requests native focus, returning whether GTK accepted it. */
+    public method focus() bool {
+      require_thread();
+      return unsafe { raw.gtk_widget_grab_focus(this.pointer); } != 0;
+    }
+
+    /** Reports whether this button currently owns native focus. */
+    public const method is_focused() bool {
+      require_thread();
+      return unsafe { raw.gtk_widget_is_focus(this.pointer); } != 0;
+    }
+
+    /** Consumes one click without invoking user code inside a native callback. */
+    public method take_click() bool {
+      require_thread();
+      return unsafe { sg_button_events_take(this.events); } != 0;
+    }
+
+    /** Emits a clicked event, useful for keyboard actions and automated tests. */
+    public method click() void {
+      require_thread();
+      unsafe { sg_button_emit_clicked(this.pointer); };
+    }
+  }
+}

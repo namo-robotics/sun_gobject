@@ -1,0 +1,95 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Gives a callback owned staging storage without borrowing the active registry. */
+  public class EventContext<State> {
+    var core: LoopCore;
+    var current: RegistrationId;
+    var event: EventKind;
+    var commands: Vec<EventCommand<State>>;
+    var stopped: bool = false;
+    /** Creates a dispatch-only context from private loop storage. */
+    init(core: LoopCore, current: RegistrationId, kind: u32) {
+      this.core = core;
+      this.current = current;
+      this.event = kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer);
+      var a = make_heap_allocator();
+      this.commands = Vec<EventCommand<State>>(a, 4);
+    }
+
+    /** Releases staged registrations on the main thread, including after callback failure. */
+    deinit() {
+      require_thread();
+    }
+
+    /** Returns an explicit copy of the currently delivered registration identity. */
+    public const method registration() RegistrationId {
+      require_thread();
+      return this.current.copy();
+    }
+
+    /** Returns the event category. */
+    public const method kind() EventKind {
+      require_thread();
+      return this.event;
+    }
+
+    /** Stops dispatch after this callback returns. */
+    public method quit() void {
+      require_thread();
+      this.stopped = true;
+    }
+
+    /** Stages cancellation before any later queued delivery. */
+    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
+      try validate_id(this.core, id);
+      var command: EventCommand<State> = EventCommand.Remove(id.number);
+      this.commands.push(command);
+      return SystemResult.Ok;
+    }
+
+    /** Creates a window on the retained application without exposing an application handle. */
+    public method create_window() Window {
+      require_thread();
+      return Window(this.core);
+    }
+
+    /** Stages a click callback and retains its button without borrowing the wrapper. */
+    public method on_clicked(button: ref Button, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var handler = Handler<State>(number, 1, 0, unsafe { button.raw_handle(); }, callback);
+      var command: EventCommand<State> = EventCommand.Add(handler);
+      this.commands.push(command);
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Stages a notification delivered after the specified window closes. */
+    public method on_closed(window: ref Window, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var handler = Handler<State>(number, 2, 0, unsafe { window.raw_handle(); }, callback);
+      var command: EventCommand<State> = EventCommand.Add(handler);
+      this.commands.push(command);
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Schedules one callback for a future dispatch, including a zero delay. */
+    public method after(delay_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var command: EventCommand<State> = EventCommand.Add(Handler<State>(number, 3, delay_ms, null, callback));
+      this.commands.push(command);
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Schedules repetition measured from completion of each successful callback. */
+    public method every(interval_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      require_thread();
+      if (interval_ms == 0) {
+        return SystemResult.Error(Error(1, "Repeating timer interval must be positive"));
+      }
+      var number = try this.core.reserve();
+      var command: EventCommand<State> = EventCommand.Add(Handler<State>(number, 4, interval_ms, null, callback));
+      this.commands.push(command);
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+  }
+}

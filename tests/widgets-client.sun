@@ -1,0 +1,108 @@
+using std;
+/** Waits briefly for the GTK frame clock during bounded native acceptance checks. */
+extern "C" function g_usleep(microseconds: u64) void;
+
+/** Checks ownership, validation, composition, drawing, and chooser cleanup using safe APIs. */
+function run() SystemResult<void> {
+  var id = String("org.sunlang.CheckedWidgetsTest");
+  var app = try gtk.Application(id);
+  var window = gtk.Window(app);
+  var root = try gtk.Box(gtk.Orientation.Vertical, 8);
+  var toolbar = try gtk.Box(gtk.Orientation.Horizontal, 8);
+  var text = String("Ready");
+  var label = try gtk.Label(text);
+  var area = try gtk.DrawingArea();
+  try toolbar.append(label);
+  try root.append(toolbar);
+  try root.append(area);
+  area.set_vexpand(true);
+  match root.append(label) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Reparenting a label was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  match toolbar.append(root) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "A parenting cycle was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  var invalid = String("bad");
+  invalid.append_char(0);
+  match label.set_text(invalid) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  var unchanged = label.text();
+  if (unchanged.equals_literal("Ready") == false) {
+    return SystemResult.Error(Error(1, "Invalid text changed the label"));
+  }
+  var malformed = String("<svg");
+  match svg.Document(malformed) {
+    SystemResult.Ok(_) => {
+      return SystemResult.Error(Error(1, "Malformed SVG was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  // The area must retain its document after the source wrapper leaves scope.
+  if (true) {
+    var content = String("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"><circle cx=\"100\" cy=\"50\" r=\"30\"/></svg>");
+    var document = try svg.Document(content);
+    area.set_document(document);
+  }
+  try window.set_box(root);
+  try window.set_default_size(400, 300);
+  try window.present();
+  for (var i: i64 = 0; i < 200 and area.rendered() == false; i += 1) {
+    app.iterate(false);
+    unsafe { g_usleep(10000); };
+  }
+  if (area.rendered() == false or area.render_failed()) {
+    return SystemResult.Error(Error(1, "Retained document did not render"));
+  }
+  var chooser = gtk.SaveDialog();
+  var title = String("Save test");
+  var filename = String("test.svg");
+  try chooser.show(window, title, filename);
+  match chooser.show(window, title, filename) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Concurrent save request was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  chooser.cancel();
+  chooser.cancel();
+  if (chooser.is_open()) {
+    return SystemResult.Error(Error(1, "Cancelled chooser remained open"));
+  }
+  match try chooser.take_path() {
+    Option.Some(_) => {
+      return SystemResult.Error(Error(1, "Cancelled chooser returned a path"));
+    },
+    Option.None => {}
+  };
+  window.close();
+  match chooser.show(window, title, filename) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Closed parent accepted a save request"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  println("Checked drawing widgets passed");
+  return SystemResult.Ok;
+}
+
+/** Reports native wrapper acceptance failures to the parent test process. */
+function main() i32 {
+  return match run() {
+    SystemResult.Ok => 0,
+    SystemResult.Error(error) => {
+      eprintln(error.message());
+      return 1;
+    }
+  };
+}
+manifest { libraries: ["stdlib.moon", "sun_gobject.moon", "sun_gtk.moon"] }

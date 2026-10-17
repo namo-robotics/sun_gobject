@@ -1,0 +1,58 @@
+using std;
+/** Owns GTK objects and delivers button events without exposing callback pointers. */
+public module gtk {
+  /** Stops execution before a GTK operation on a non-main thread. */
+  extern "C" function sg_ui_require_main_thread() void;
+
+  /** Validates UTF-8 and rejects embedded NUL bytes before calling GTK. */
+  extern "C" function sg_ui_valid_text(text: raw_ptr<u8>, length: u64) i32;
+
+  /** Creates an independent native click queue retaining its button. */
+  extern "C" function sg_button_events_new(button: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Disconnects and releases a click queue and its button reference. */
+  extern "C" function sg_button_events_free(events: raw_ptr<u8>) void;
+
+  /** Consumes one queued click. */
+  extern "C" function sg_button_events_take(events: raw_ptr<u8>) i32;
+
+  /** Emits a concrete clicked signal without exposing variadic calls. */
+  extern "C" function sg_button_emit_clicked(button: raw_ptr<u8>) void;
+
+  /** Checks whether GTK has detached a destroyed window from its application. */
+  extern "C" function sg_window_is_open(window: raw_ptr<u8>) i32;
+
+  /** Rejects manual context pumping while a callback loop is active. */
+  extern "C" function sg_ui_require_manual_iteration() void;
+
+  /** Initializes GTK while allowing an unavailable display to be reported. */
+  extern "C" function gtk_init_check() i32;
+
+  /** Checks the application identifier syntax before construction. */
+  extern "C" function g_application_id_is_valid(id: raw_ptr<u8>) i32;
+
+  /** Registers an application and runs its startup handlers. */
+  extern "C" function g_application_register(app: raw_ptr<u8>, cancellable: raw_ptr<u8>, error: raw_ptr<u8>) i32;
+
+  /** Reads a widget's parent without transferring ownership. */
+  extern "C" function gtk_widget_get_parent(widget: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Detects parenting cycles before inserting a container. */
+  extern "C" function gtk_widget_is_ancestor(widget: raw_ptr<u8>, ancestor: raw_ptr<u8>) i32;
+
+  /** Enforces GTK's main-thread boundary, including during object destruction. */
+  function require_thread() void {
+    unsafe { sg_ui_require_main_thread(); };
+  }
+
+  /** Validates text before it crosses the C string boundary. */
+  function validate(text: ref String) SystemResult<void> {
+    if (unsafe { sg_ui_valid_text(text.c_str(), _convert<u64>(text.length())); } == 0) {
+      return SystemResult.Error(Error(1, "GTK text must be UTF-8 without embedded NUL bytes"));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Selects the native axis used by a GTK box. */
+  public enum Orientation { Horizontal, Vertical }
+}

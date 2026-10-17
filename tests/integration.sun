@@ -1,6 +1,36 @@
 using std;
 /** Exercises the installed consumer and the real GTK demo through native tests. */
 module integration_tests {
+  /** Exercises checked drawing and export widgets under a real GTK main context. */
+  test_function gtk_drawing_widgets() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var output = try checks.command(fixture, "exec env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo GSETTINGS_BACKEND=memory timeout 30s dbus-run-session -- xvfb-run -a \"$2/widgets-client\"");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Checked drawing widgets passed"));
+  }
+
+  /** Stops drawing-area construction on a worker before GTK is accessed. */
+  test_function gtk_drawing_rejects_worker_thread() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var source = String("using std;\n/** Attempts drawing construction on a worker. */\nfunction worker() i32 { return match gtk.DrawingArea() { SystemResult.Ok(_) => 0, SystemResult.Error(_) => 1 }; }\n/** Joins only if the thread guard failed. */\nfunction main() i32 { var thread = std.thread.spawn(worker); return thread.join(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    try compile_gtk_client(fixture, source);
+    var output = try checks.command(fixture, "ulimit -c 0; exec \"$1/client\"");
+    try std.test.assert_ne(output.status(), 0);
+    try std.test.assert(output.stderr().contains("must be used and destroyed on the main thread"));
+  }
+
+  /** Prevents safe callers from reaching the drawing widget's native handle. */
+  test_function gtk_drawing_handle_requires_unsafe() checks.Result<void> {
+    var fixture = try checks.Fixture();
+    var source = String("/** Attempts unsafe access from safe code. */\nfunction borrow(area: ref gtk.DrawingArea) raw_ptr<u8> { return area.raw_handle(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var path = fixture.file("client.sun");
+    try checks.write(path, source);
+    var output = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    try std.test.assert_ne(output.status(), 0);
+    try std.test.assert(output.stderr().contains("unsafe"));
+    try std.test.assert(output.stderr().contains("raw_handle"));
+  }
+
   /** Builds and runs a consumer using only a separately installed bundle. */
   test_function installed_consumer() checks.Result<void> {
     var fixture = try checks.Fixture();

@@ -1,0 +1,24 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** An opaque dispatcher-specific identity; dropping it does not disconnect its source. */
+  public class RegistrationId {
+    var owner: u64;
+    var number: u64;
+    /** Constructs an identity from module-private registration data. */
+    init(seed: IdSeed) {
+      this.owner = seed.owner;
+      this.number = seed.number;
+    }
+
+    /** Compares opaque source identities, including their owning queue. */
+    public const method equals(other: const ref RegistrationId) bool {
+      return this.owner == other.owner and this.number == other.number;
+    }
+
+    /** Copies the identifier explicitly, without retaining the event source. */
+    public const method copy() RegistrationId {
+      return RegistrationId(IdSeed(this.owner, this.number));
+    }
+  }
+}

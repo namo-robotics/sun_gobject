@@ -1,0 +1,33 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns a reference to stable native storage without owning any Sun callbacks. */
+  class LoopCore {
+    var pointer: raw_ptr<u8>;
+    /** Adopts one reference produced by the native queue helpers. */
+    init(pointer: raw_ptr<u8>) {
+      this.pointer = pointer;
+    }
+
+    /** Releases storage on GTK's required thread. */
+    deinit() {
+      require_thread();
+      unsafe { sg_loop_unref(this.pointer); };
+    }
+
+    /** Explicitly retains native storage for a context. */
+    method copy() LoopCore {
+      return LoopCore(unsafe { sg_loop_ref(this.pointer); });
+    }
+
+    /** Rejects additions after completion or registration number exhaustion. */
+    method reserve() SystemResult<u64> {
+      require_thread();
+      var id = unsafe { sg_loop_reserve(this.pointer); };
+      if (id == 0) {
+        return SystemResult.Error(Error(1, "Event loop is finished or registration IDs are exhausted"));
+      }
+      return SystemResult.Ok(id);
+    }
+  }
+}

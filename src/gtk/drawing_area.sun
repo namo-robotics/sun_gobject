@@ -1,0 +1,62 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns a drawing widget and its independently retained SVG document on the GTK thread. */
+  public class DrawingArea {
+    var pointer: raw_ptr<u8> = null;
+    /** Creates an initially empty surface. */
+    init() SystemResult<void> {
+      require_thread();
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+      }
+      this.pointer = unsafe { gtk_drawing_area_new(); };
+      unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
+    }
+
+    /** Releases the widget; its callback releases the document when the final widget owner drops. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Retains an independent document reference and resets render status before requesting a frame. */
+    public method set_document(document: const ref svg.Document) void {
+      require_thread();
+      unsafe {
+        var handle = document.raw_handle();
+        gobject.raw.g_object_ref(handle);
+        gtk_drawing_area_set_draw_func(this.pointer, paint_svg, handle, release_svg);
+        g_object_set_data(this.pointer, "sun-gtk-rendered", null);
+        g_object_set_data(this.pointer, "sun-gtk-render-failed", null);
+        gtk_widget_queue_draw(this.pointer);
+      };
+    }
+
+    /** Controls expansion without exposing a platform pointer. */
+    public method set_vexpand(expand: bool) void {
+      require_thread();
+      unsafe { gtk_widget_set_vexpand(this.pointer, expand ? 1 : 0); };
+    }
+
+    /** Reports whether the current document has painted successfully. */
+    public const method rendered() bool {
+      require_thread();
+      return unsafe { g_object_get_data(this.pointer, "sun-gtk-rendered"); } != null;
+    }
+
+    /** Reports a native rendering failure for the current document. */
+    public const method render_failed() bool {
+      require_thread();
+      return unsafe { g_object_get_data(this.pointer, "sun-gtk-render-failed"); } != null;
+    }
+
+    /** Borrows the native widget under GTK's unsafe lifetime contract. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      require_thread();
+      return this.pointer;
+    }
+  }
+}

@@ -20,7 +20,7 @@ root:
 ```
 
 The container includes the Sun dev release and matching standard library, LLVM 20,
-CMake, Ninja, GTK4 development files, GIR metadata, Xvfb, and D-Bus. `./build.sh`
+CMake, Ninja, GTK4 development files, librsvg, GIR metadata, Xvfb, and D-Bus. `./build.sh`
 builds the native libraries, generates bindings, compiles Sun artifacts, and runs
 the full test suite. The demo needs a desktop display; headless tests use Xvfb.
 
@@ -150,8 +150,8 @@ flowchart TD
 | [`src/generator/`](src/generator/) | Read XML, load versioned GIR dependencies, translate supported C ABI types, and emit bindings. |
 | [`bindings/`](bindings/) | Select supported declarations in `selection.xml` and apply explicit metadata corrections in `overrides.xml`. |
 | [`src/support.sun`](src/support.sun) | Provide low-level reference ownership, property helpers, and signal connections. |
-| [`src/gtk.sun`](src/gtk.sun) | Provide owned widgets, box placement, and focus operations with checked native contracts. |
-| [`src/events.sun`](src/events.sun) | Expose state-independent native events and timers, plus an optional imperative callback loop. |
+| [`src/gtk/`](src/gtk/) | Provide checked widgets, drawing surfaces, save dialogs, and native events, with at most one class per file. Shared declarations and helpers live in support files. |
+| [`src/svg/`](src/svg/) | Own parsed librsvg documents and expose an explicit unsafe native render boundary, with separate document and viewport classes. |
 | [`native/`](native/) | Implement C signal adapters, event storage, UTF-8 validation, and the Linux main-thread guard. |
 | [`tools/build.sun`](tools/build.sun) | Orchestrate generation, Sun compilation, tests, and installation. |
 | [`tests/`](tests/) | Test the generator, runtime helpers, event loop, GTK demo, and an isolated installed consumer. |
@@ -179,3 +179,30 @@ Compiler limitations and reproducible examples are recorded in
 [sun_feedback.md](sun_feedback.md). Inspired by
 [Ghostty's zig-gobject](https://github.com/ghostty-org/zig-gobject), with development
 conventions from [Sun](https://github.com/namo-robotics/sun).
+
+## Drawing and save dialogs
+
+The `sun_gtk.moon` bundle includes `gtk.Label`, `gtk.DrawingArea`,
+`gtk.SaveDialog`, and `svg.Document`. Link `librsvg-2.so.2` when using the SVG
+wrappers, in addition to the existing GTK and native support libraries. The
+platform-independent `sun_gobject.moon` bundle does not depend on librsvg or GTK.
+
+`Box.append` accepts buttons, labels, drawing areas, and nested boxes. It rejects
+existing parents and parenting cycles. Each wrapper owns its own native reference.
+`Label.set_text` validates UTF-8 and embedded NUL bytes before changing the label.
+
+Parse content with `svg.Document(content)` and pass it to
+`DrawingArea.set_document(document)`. The area retains an independent reference;
+the original document can then be released. Replacing a document releases the
+previous callback's reference and clears render status. `rendered()` and
+`render_failed()` report the latest native paint outcome. Widget operations and
+destruction enforce the GTK main-thread rule. Native callbacks retain no Sun
+references, application state, or closures.
+
+`SaveDialog.show(window, title, filename)` opens one native save request.
+After iterating the application's context, `take_path()` returns a selected local
+path once, or `None` while pending or after cancellation. A non-local destination
+returns an error. `cancel()` is idempotent; destruction also closes the dialog and
+releases its retained parent. Text validation, closed parents, and duplicate
+requests are checked before calling GTK. Applications remain responsible for
+writing files and presenting success or error messages.

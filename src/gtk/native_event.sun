@@ -1,0 +1,24 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Describes one native delivery without borrowing widgets or application state. */
+  public class NativeEvent {
+    var id: RegistrationId;
+    var event_kind: EventKind;
+    /** Takes an opaque identity and its native event category. */
+    init(id: RegistrationId, kind: EventKind) {
+      this.id = id;
+      this.event_kind = kind;
+    }
+
+    /** Returns an explicit copy of the source identity. */
+    public const method registration() RegistrationId {
+      return this.id.copy();
+    }
+
+    /** Reports whether a click, window removal, or timeout occurred. */
+    public const method kind() EventKind {
+      return this.event_kind;
+    }
+  }
+}

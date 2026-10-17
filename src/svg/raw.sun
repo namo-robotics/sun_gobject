@@ -1,0 +1,9 @@
+using std;
+/** Owns parsed SVG documents independently of UI layout and application state. */
+public module svg {
+  /** Parses SVG bytes into an independently referenced document. */
+  extern "C" function rsvg_handle_new_from_data(data: raw_ptr<u8>, length: u64, error: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Renders vector geometry into a borrowed Cairo context. */
+  extern "C" function rsvg_handle_render_document(handle: raw_ptr<u8>, cairo: raw_ptr<u8>, viewport: ref Viewport, error: raw_ptr<u8>) i32;
+}

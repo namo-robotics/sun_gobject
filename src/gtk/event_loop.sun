@@ -1,0 +1,182 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns an application and callback registry for one main-thread dispatch session. */
+  public class EventLoop<State> {
+    var application: Application;
+    var core: LoopCore;
+    var handlers: Vec<Handler<State>>;
+    /** Takes the application and allocates registry and native queue storage. */
+    init(application: Application) {
+      require_thread();
+      this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
+      this.application = application;
+      var a = make_heap_allocator();
+      this.handlers = Vec<Handler<State>>(a, 8);
+    }
+
+    /** Disconnects every source before releasing application and queue references. */
+    deinit() {
+      require_thread();
+      this.finish();
+    }
+
+    /** Clears subscriptions and pending work, making this loop permanently complete. */
+    method finish() void {
+      this.handlers.clear();
+      unsafe { sg_loop_finish(this.core.pointer); };
+    }
+
+    /** Finds an active registration without exposing registry references. */
+    method find(number: u64) i64 {
+      for (var i: i64 = 0; i < this.handlers.size(); i += 1) {
+        if (this.handlers[i].number == number) {
+          return i;
+        }
+      }
+      return -1;
+    }
+
+    /** Cancels a live handler, releasing its native signal or timeout source. */
+    method remove(number: u64) void {
+      var index = this.find(number);
+      if (index >= 0) {
+        match this.handlers.remove(index) {
+          AccessResult.Ok(handler) => {},
+          AccessResult.OutOfBounds(_) => {}
+        };
+      }
+    }
+
+    /** Installs a staged handler and transfers it into registry ownership. */
+    method add(handler: Handler<State>) SystemResult<void> {
+      try handler.install(this.core);
+      this.handlers.push(handler);
+      return SystemResult.Ok;
+    }
+
+    /** Registers a click callback with independent native emitter ownership. */
+    public method on_clicked(button: ref Button, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      try this.add(Handler<State>(number, 1, 0, unsafe { button.raw_handle(); }, callback));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Registers a notification for a window belonging to this application. */
+    public method on_closed(window: ref Window, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      try this.add(Handler<State>(number, 2, 0, unsafe { window.raw_handle(); }, callback));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Registers a one-shot timeout; zero means a future dispatch turn. */
+    public method after(delay_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      try this.add(Handler<State>(number, 3, delay_ms, null, callback));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Registers a timer with a positive delay after each callback completes. */
+    public method every(interval_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+      require_thread();
+      if (interval_ms == 0) {
+        return SystemResult.Error(Error(1, "Repeating timer interval must be positive"));
+      }
+      var number = try this.core.reserve();
+      try this.add(Handler<State>(number, 4, interval_ms, null, callback));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Cancels this loop's registration; an already removed ID is harmless. */
+    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
+      try validate_id(this.core, id);
+      this.remove(id.number);
+      return SystemResult.Ok;
+    }
+
+    /** Applies callback changes in order after the callback's registry borrow ends. */
+    method apply(context: ref EventContext<State>) SystemResult<void> {
+      while (context.commands.size() > 0) {
+        match context.commands.remove(0) {
+          AccessResult.Ok(command) => {
+            match command {
+              EventCommand.Add(handler) => {
+                try this.add(handler);
+              },
+              EventCommand.Remove(number) => {
+                this.remove(number);
+              }
+            };
+          },
+          AccessResult.OutOfBounds(_) => {}
+        };
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Dispatches one event, then commits changes and rearms a surviving repeated timer. */
+    method dispatch(number: u64, state: ref State) SystemResult<bool> {
+      var index = this.find(number);
+      if (index < 0) {
+        return SystemResult.Ok(false);
+      }
+      var kind = this.handlers[index].kind;
+      var id = registration_id(this.core, number);
+      var context = EventContext<State>(this.core.copy(), id, kind);
+      if (true) {
+        try this.handlers[index].call(state, context);
+      }
+      if (kind == 2 or kind == 3) {
+        this.remove(number);
+      }
+      try this.apply(context);
+      if (context.stopped) {
+        return SystemResult.Ok(true);
+      }
+      var remaining = this.find(number);
+      if (kind == 4 and remaining >= 0) {
+        unsafe { sg_loop_rearm(this.handlers[remaining].source, this.handlers[remaining].delay); };
+      }
+      return SystemResult.Ok(false);
+    }
+
+    /** Services GTK between bounded FIFO batches and drains close notifications before exit. */
+    method dispatch_loop(state: ref State) SystemResult<void> {
+      while (true) {
+        var has_windows = unsafe { sg_loop_has_windows(this.core.pointer); } != 0;
+        var number = unsafe { sg_loop_pop(this.core.pointer, has_windows ? 0 : 1); };
+        if (number == 0 and has_windows == false) {
+          return SystemResult.Ok;
+        }
+        var count: i32 = 0;
+        while (number != 0 and count < 64) {
+          if (try this.dispatch(number, state)) {
+            return SystemResult.Ok;
+          }
+          count += 1;
+          if (count < 64) {
+            has_windows = unsafe { sg_loop_has_windows(this.core.pointer); } != 0;
+            number = unsafe { sg_loop_pop(this.core.pointer, has_windows ? 0 : 1); };
+          }
+        }
+        if (unsafe { sg_loop_has_windows(this.core.pointer); } == 0) {
+          // Re-enter the close-only drain without waiting for unrelated timers.
+        } else {
+          var block = unsafe { sg_loop_pending(this.core.pointer); } == 0;
+          unsafe { sg_loop_iterate(this.core.pointer, block ? 1 : 0); };
+        }
+      }
+    }
+
+    /** Borrows state until completion and always cleans up after success or callback error. */
+    public method run(state: ref State) SystemResult<void> {
+      require_thread();
+      if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
+        return SystemResult.Error(Error(1, "Event loop is finished or dispatch is already active"));
+      }
+      var result = this.dispatch_loop(state);
+      this.finish();
+      return result;
+    }
+  }
+}

@@ -1,0 +1,61 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns a registered, non-unique GTK application on the main thread. */
+  public class Application {
+    var pointer: raw_ptr<u8> = null;
+    var stopped: bool = false;
+    /** Initializes GTK and registers a valid application, or reports failure. */
+    init(id: ref String) SystemResult<void> {
+      require_thread();
+      try validate(id);
+      if (unsafe { g_application_id_is_valid(id.c_str()); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid application identifier"));
+      }
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+      }
+      this.pointer = unsafe { raw.gtk_application_new(id.c_str(), 32); };
+      if (unsafe { g_application_register(this.pointer, null, null); } == 0) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+        this.pointer = null;
+        return SystemResult.Error(Error(1, "Cannot register GTK application"));
+      }
+    }
+
+    /** Releases the owned application reference on its required thread. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Exposes a borrowed handle only to code accepting the unsafe FFI contract. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      require_thread();
+      return this.pointer;
+    }
+
+    /** Processes one main-context iteration; callers consume widget events afterwards. */
+    public method iterate(block: bool) void {
+      require_thread();
+      unsafe { sg_ui_require_manual_iteration(); };
+      if (this.stopped == false) {
+        unsafe { glib.raw.g_main_context_iteration(null, block ? 1 : 0); };
+      }
+    }
+
+    /** Requests that the application's explicit event loop stop. */
+    public method quit() void {
+      require_thread();
+      this.stopped = true;
+    }
+
+    /** Reports whether quit has been requested. */
+    public const method running() bool {
+      require_thread();
+      return this.stopped == false;
+    }
+  }
+}

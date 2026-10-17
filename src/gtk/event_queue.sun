@@ -1,0 +1,101 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module gtk {
+  /** Owns native FIFO delivery; consumers decide batching, state updates, and shutdown. */
+  public class EventQueue {
+    var core: LoopCore;
+    var sources: Vec<QueuedSource>;
+    /** Retains the application and acquires exclusive default-context dispatch. */
+    init(application: ref Application) SystemResult<void> {
+      this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
+      var a = make_heap_allocator();
+      this.sources = Vec<QueuedSource>(a, 8);
+      if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
+        return SystemResult.Error(Error(1, "Another event dispatcher owns the GTK context"));
+      }
+    }
+
+    /** Cancels subscriptions, discards pending events, and releases dispatch ownership. */
+    deinit() {
+      require_thread();
+      this.sources.clear();
+      unsafe { sg_loop_finish(this.core.pointer); };
+    }
+
+    /** Installs a signal adapter retaining its emitter independently of its wrapper. */
+    method connect(kind: u32, emitter: raw_ptr<u8>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var source = unsafe { sg_loop_connect(this.core.pointer, number, kind, emitter); };
+      if (source == null) {
+        return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
+      }
+      this.sources.push(QueuedSource(number, kind, source));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Queues clicks without invoking Sun code from GTK callbacks. */
+    public method on_clicked(button: ref Button) SystemResult<RegistrationId> {
+      return this.connect(1, unsafe { button.raw_handle(); });
+    }
+
+    /** Queues one removal notification for a window belonging to this application. */
+    public method on_closed(window: ref Window) SystemResult<RegistrationId> {
+      return this.connect(2, unsafe { window.raw_handle(); });
+    }
+
+    /** Queues a one-shot timeout; zero schedules a future native dispatch turn. */
+    public method after(delay_ms: u32) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var source = unsafe { sg_loop_timer(this.core.pointer, number, delay_ms); };
+      this.sources.push(QueuedSource(number, 3, source));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Cancels future and queued deliveries; cancellation within this queue is idempotent. */
+    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
+      try validate_id(this.core, id);
+      for (var i: i64 = 0; i < this.sources.size(); i += 1) {
+        if (this.sources[i].number == id.number) {
+          match this.sources.remove(i) {
+            AccessResult.Ok(_) => {},
+            AccessResult.OutOfBounds(_) => {}
+          };
+          break;
+        }
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Takes the next live delivery, skipping canceled sources and consuming one-shot sources. */
+    public method next() Option<NativeEvent> {
+      require_thread();
+      while (true) {
+        var number = unsafe { sg_loop_pop(this.core.pointer, 0); };
+        if (number == 0) {
+          return Option.None;
+        }
+        for (var i: i64 = 0; i < this.sources.size(); i += 1) {
+          if (this.sources[i].number == number) {
+            var kind = this.sources[i].kind;
+            var id = registration_id(this.core, number);
+            if (kind != 1) {
+              match this.sources.remove(i) {
+                AccessResult.Ok(_) => {},
+                AccessResult.OutOfBounds(_) => {}
+              };
+            }
+            return Option.Some(NativeEvent(id, kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer)));
+          }
+        }
+      }
+      return Option.None;
+    }
+
+    /** Services GTK once, blocking only when requested and no deliveries are queued. */
+    public method iterate(block: bool) void {
+      require_thread();
+      var pending = unsafe { sg_loop_pending(this.core.pointer); };
+      unsafe { sg_loop_iterate(this.core.pointer, block and pending == 0 ? 1 : 0); };
+    }
+  }
+}

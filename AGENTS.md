@@ -12,6 +12,7 @@ A file for guiding coding agents.
 - Sun build: `sun tools/build.sun -- build` after building native dependencies.
 - Tests: `sun tools/build.sun -- test` runs the native Sun test functions in parallel. Use `./scripts/sun-test-compiler.sh test tests/main.sun --test-filter <name>` to rebuild and run selected tests.
 - Keep production Sun source in `src/`, C source and CMake configuration in `native/`, XML binding configuration in `bindings/`, and generated artifacts in `build/`.
+- Keep GTK bindings in `src/gtk/` and SVG bindings in `src/svg/`, with at most one class per file. Shared native declarations, enums, and helpers belong in support files. Update the generator's bundle source list when adding or moving binding files.
 
 ## Sun Code Conventions
 

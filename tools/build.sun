@@ -61,6 +61,7 @@ module build_tasks {
     for (var word: ref String in words) {
       command.add_arg(word);
     }
+    command.add_arg("-l:librsvg-2.so.2");
     return SystemResult.Ok;
   }
 
@@ -218,6 +219,16 @@ module build_tasks {
     try native_dependency(events, "build/native/libsun_gobject_test_support.a", "build/event-client");
     events.add_arg("tests/event-client.sun");
     try run(events);
+    println("Compiling drawing widget test client");
+    var widgets = try compile(true);
+    widgets.add_arg("-l:libsun_gobject_native.a");
+    try link_gtk(widgets);
+    widgets.add_arg("-c");
+    widgets.add_arg("-o");
+    widgets.add_arg("build/widgets-client");
+    try native_dependency(widgets, "build/native/libsun_gobject_native.a", "build/widgets-client");
+    widgets.add_arg("tests/widgets-client.sun");
+    try run(widgets);
     println("Compiling Sun tests");
     var tests = try compile(true);
     tests.add_arg("-lsun_gobject_test_support");

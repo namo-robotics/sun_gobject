@@ -1,0 +1,79 @@
+using std;
+/** Provides checked labels, vector drawing surfaces, and native save dialogs. */
+public module gtk {
+  /** Creates a GTK label after validation. */
+  extern "C" function gtk_label_new(text: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Copies new text into a label. */
+  extern "C" function gtk_label_set_text(label: raw_ptr<u8>, text: raw_ptr<u8>) void;
+
+  /** Borrows the current label text. */
+  extern "C" function gtk_label_get_text(label: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Creates a GTK drawing area. */
+  extern "C" function gtk_drawing_area_new() raw_ptr<u8>;
+
+  /** Installs a native callback with an independently retained document. */
+  extern "C" function gtk_drawing_area_set_draw_func(area: raw_ptr<u8>, draw: function (raw_ptr<u8>, raw_ptr<u8>, i32, i32, raw_ptr<u8>) void, data: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) void;
+
+  /** Requests another frame after changing document content. */
+  extern "C" function gtk_widget_queue_draw(widget: raw_ptr<u8>) void;
+
+  /** Sets whether a surface consumes available vertical space. */
+  extern "C" function gtk_widget_set_vexpand(widget: raw_ptr<u8>, expand: i32) void;
+
+  /** Stores non-owning render and dialog state on a native object. */
+  extern "C" function g_object_set_data(object: raw_ptr<u8>, key: raw_ptr<u8>, value: raw_ptr<u8>) void;
+
+  /** Reads native callback state without borrowing Sun storage. */
+  extern "C" function g_object_get_data(object: raw_ptr<u8>, key: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Creates a native save chooser owned by the caller. */
+  extern "C" function gtk_file_chooser_native_new(title: raw_ptr<u8>, parent: raw_ptr<u8>, action: i32, accept: raw_ptr<u8>, cancel: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Suggests a filename copied by the chooser. */
+  extern "C" function gtk_file_chooser_set_current_name(chooser: raw_ptr<u8>, name: raw_ptr<u8>) void;
+
+  /** Obtains an owned reference to the selected file. */
+  extern "C" function gtk_file_chooser_get_file(chooser: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Copies the selected local path, returning null for non-local files. */
+  extern "C" function g_file_get_path(file: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Releases native string storage. */
+  extern "C" function g_free(memory: raw_ptr<u8>) void;
+
+  /** Presents a native dialog. */
+  extern "C" function gtk_native_dialog_show(dialog: raw_ptr<u8>) void;
+
+  /** Closes a dialog and releases platform resources. */
+  extern "C" function gtk_native_dialog_destroy(dialog: raw_ptr<u8>) void;
+
+  /** Connects responses with no Sun references retained by GTK. */
+  extern "C" function connect_save_response(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, i32, raw_ptr<u8>) void, data: raw_ptr<u8>, destroy: raw_ptr<u8>, flags: i32) u64 as "g_signal_connect_data";
+
+  /** Releases the reference owned by a drawing area's callback. */
+  function release_svg(data: raw_ptr<u8>) void {
+    unsafe { gobject.raw.g_object_unref(data); };
+  }
+
+  /** Paints a document and records completion on the surface, independently for each viewer. */
+  function paint_svg(area: raw_ptr<u8>, cairo: raw_ptr<u8>, width: i32, height: i32, data: raw_ptr<u8>) void {
+    require_thread();
+    var viewport = svg.Viewport(_convert<f64>(width), _convert<f64>(height));
+    var success = unsafe { viewport.render(data, cairo); };
+    unsafe {
+      g_object_set_data(area, "sun-gtk-rendered", success ? area : null);
+      g_object_set_data(area, "sun-gtk-render-failed", success ? null : area);
+    };
+  }
+
+  /** Captures a chooser response for later polling outside the native callback. */
+  function save_response(dialog: raw_ptr<u8>, response: i32, data: raw_ptr<u8>) void {
+    require_thread();
+    unsafe {
+      g_object_set_data(dialog, "sun-gtk-save-done", dialog);
+      g_object_set_data(dialog, "sun-gtk-save-accepted", response == -3 ? dialog : null);
+    };
+  }
+}

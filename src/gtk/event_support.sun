@@ -1,0 +1,74 @@
+using std;
+/** Provides native event queues and an optional imperative callback loop. */
+public module gtk {
+  /** Allocates stable native event storage retaining its application. */
+  extern "C" function sg_loop_new(app: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Retains native event storage for a dispatch context. */
+  extern "C" function sg_loop_ref(loop: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Releases native event storage. */
+  extern "C" function sg_loop_unref(loop: raw_ptr<u8>) void;
+
+  /** Returns the unique identity of native event storage. */
+  extern "C" function sg_loop_identity(loop: raw_ptr<u8>) u64;
+
+  /** Reserves a never-reused registration number. */
+  extern "C" function sg_loop_reserve(loop: raw_ptr<u8>) u64;
+
+  /** Borrows the application's native pointer. */
+  extern "C" function sg_loop_application(loop: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Reports whether the loop can still accept registrations. */
+  extern "C" function sg_loop_open(loop: raw_ptr<u8>) i32;
+
+  /** Acquires exclusive ownership of main-context dispatch. */
+  extern "C" function sg_loop_begin(loop: raw_ptr<u8>) i32;
+
+  /** Finishes dispatch and discards queued deliveries. */
+  extern "C" function sg_loop_finish(loop: raw_ptr<u8>) void;
+
+  /** Reports whether the application's window list is nonempty. */
+  extern "C" function sg_loop_has_windows(loop: raw_ptr<u8>) i32;
+
+  /** Counts queued deliveries. */
+  extern "C" function sg_loop_pending(loop: raw_ptr<u8>) u32;
+
+  /** Pops the next delivery, optionally skipping non-close events. */
+  extern "C" function sg_loop_pop(loop: raw_ptr<u8>, closed_only: i32) u64;
+
+  /** Performs one GTK iteration for the active loop. */
+  extern "C" function sg_loop_iterate(loop: raw_ptr<u8>, block: i32) void;
+
+  /** Creates a native signal adapter retaining its emitter. */
+  extern "C" function sg_loop_connect(loop: raw_ptr<u8>, id: u64, kind: u32, emitter: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Creates a native one-shot timer. */
+  extern "C" function sg_loop_timer(loop: raw_ptr<u8>, id: u64, delay: u32) raw_ptr<u8>;
+
+  /** Rearms a consumed timer after its Sun callback. */
+  extern "C" function sg_loop_rearm(source: raw_ptr<u8>, delay: u32) void;
+
+  /** Disconnects and releases an adapter or timer. */
+  extern "C" function sg_loop_source_free(source: raw_ptr<u8>) void;
+
+  /** Identifies a native event category for polling or callback delivery. */
+  public enum EventKind { Clicked, Closed, Timer }
+
+  /** Builds an identity for one reservation without exposing a public numeric constructor. */
+  function registration_id(core: ref LoopCore, number: u64) RegistrationId {
+    return RegistrationId(IdSeed(unsafe { sg_loop_identity(core.pointer); }, number));
+  }
+
+  /** Owns an addition or records a cancellation staged during a callback. */
+  enum EventCommand<State> { Add(Handler<State>), Remove(u64) }
+
+  /** Validates a token before cancellation; stale tokens from this loop remain harmless. */
+  function validate_id(core: ref LoopCore, id: const ref RegistrationId) SystemResult<void> {
+    require_thread();
+    if (id.owner != unsafe { sg_loop_identity(core.pointer); }) {
+      return SystemResult.Error(Error(1, "Registration belongs to another event loop"));
+    }
+    return SystemResult.Ok;
+  }
+}

@@ -1,0 +1,27 @@
+using std;
+/** Provides one owned binding type within the shared module. */
+public module svg {
+  /** Owns an immutable parsed document; parsing failure never leaves a live partial handle. */
+  public class Document {
+    var pointer: raw_ptr<u8> = null;
+    /** Copies SVG content into librsvg-owned storage or returns a parsing error. */
+    init(content: const ref String) SystemResult<void> {
+      this.pointer = unsafe { rsvg_handle_new_from_data(content.bytes(), _convert<u64>(content.length()), null); };
+      if (this.pointer == null) {
+        return SystemResult.Error(Error(1, "Could not parse SVG document"));
+      }
+    }
+
+    /** Releases this document's reference. */
+    deinit() {
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Borrows a native handle; callers must retain a reference if storing it. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      return this.pointer;
+    }
+  }
+}
