@@ -1,12 +1,13 @@
 # Sun compiler and standard-library feedback
 
-Issue-ready drafts only; no upstream issues have been created. Tested against
+Upstream issues are tracked below. Tested against
 `sun 0.dev (cc7686189ee2)` from the `dev` Debian package. Re-run the probes when
-updating the package. Each item remains open until an upstream issue or fix is linked.
+updating the package. Filing an issue does not resolve the item; keep it open
+until an upstream fix is verified in the compiler used by this project.
 
 ## Provide XML parsing in the Sun standard library
 
-- **Status/link:** Draft; not filed.
+- **Status/link:** Open — [sun#383](https://github.com/namo-robotics/sun/issues/383).
 - **Use case:** Consume GObject Introspection XML entirely in Sun, including namespace
   resolution, UTF-8, entities, attributes, text, comments, and CDATA.
 - **Reproduction:** Build this repository and run `build/sun-gir --check-xml tests/fixtures/xml-valid.xml`.
@@ -23,7 +24,7 @@ updating the package. Each item remains open until an upstream issue or fix is l
 
 ## Support explicit unsafe C function-pointer casts for callback adapters
 
-- **Status/link:** Draft; not filed.
+- **Status/link:** Open — [sun#384](https://github.com/namo-robotics/sun/issues/384).
 - **Reproduction:** `sun --emit-obj -o tmp/callback-cast.o tests/fixtures/callback-cast.sun`.
 - **Actual:** `No overload of 'typed' matches expected type 'function () void'`.
 - **Expected:** An explicit unsafe way to erase and recover C function pointers,
@@ -38,7 +39,7 @@ updating the package. Each item remains open until an upstream issue or fix is l
 
 ## Represent nullable C function pointers
 
-- **Status/link:** Draft; not filed.
+- **Status/link:** Open — [sun#385](https://github.com/namo-robotics/sun/issues/385).
 - **Reproduction:** `sun --emit-obj -o tmp/callback-null.o tests/fixtures/callback-null.sun`.
 - **Actual:** `No matching overload of 'accepts_optional' for argument types (null)`.
 - **Expected:** A nullable C function-pointer type with checked narrowing before
