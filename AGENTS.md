@@ -13,20 +13,12 @@ A file for guiding coding agents.
 - Tests: `sun tools/build.sun -- test` runs the native Sun test functions in parallel. Use `./scripts/sun-test-compiler.sh test tests/main.sun --test-filter <name>` to rebuild and run selected tests.
 - Keep production Sun source in `src/`, C source and CMake configuration in `native/`, XML binding configuration in `bindings/`, and generated artifacts in `build/`.
 
-## Sun Language Conventions
+## Sun Code Conventions
 
-- Implement as much project functionality, tooling, and test logic as possible in Sun rather than other scripts or languages. Use other languages only where Sun cannot reasonably provide the required functionality.
-
-- Sun DOES NOT ALLOW IMPLICIT COPIES.
-- Sun DOES NOT HAVE MACROS
-- Sun minimizes and discourages alternative syntaxes that do the same thing.
-- Sun avoids hidden memory allocations
-- Sun is a memory-safe language that guaruntees the absense of undefined behavior outside of `unsafe` blocks
-- Usage of `unsafe` blocks is highly discouraged
-
-## Compiler Conventions
-
-- Errors: `logError()` / `logAndThrowError()` for compilation errors.
+- Implement project functionality, tooling, and test logic in Sun where practical. Use C for native interoperability that Sun cannot reasonably provide.
+- Sun does not allow implicit copies. Move owned values or use explicit copies as required.
+- Sun does not have macros.
+- Keep allocations explicit and minimize `unsafe` blocks, especially in the public GTK API.
 
 ## Code Comments (all code, including .sun files)
 - Write concise comments in plain English for a general audience of software engineers.
