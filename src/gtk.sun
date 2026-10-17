@@ -160,6 +160,18 @@ public module gtk {
       return from_c_str(a, text);
     }
 
+    /** Requests native focus, returning whether GTK accepted it. */
+    public method focus() bool {
+      require_thread();
+      return unsafe { raw.gtk_widget_grab_focus(this.pointer); } != 0;
+    }
+
+    /** Reports whether this button currently owns native focus. */
+    public const method is_focused() bool {
+      require_thread();
+      return unsafe { raw.gtk_widget_is_focus(this.pointer); } != 0;
+    }
+
     /** Consumes one click without invoking user code inside a native callback. */
     public method take_click() bool {
       require_thread();
@@ -170,6 +182,95 @@ public module gtk {
     public method click() void {
       require_thread();
       unsafe { sg_button_emit_clicked(this.pointer); };
+    }
+  }
+
+  /** Selects the native axis used by a GTK box. */
+  public enum Orientation { Horizontal, Vertical }
+
+  /** Owns a GTK box independently of its parent and its child wrappers. */
+  public class Box {
+    var pointer: raw_ptr<u8> = null;
+    /** Creates a layout container with nonnegative spacing between children. */
+    init(orientation: Orientation, spacing: i32) SystemResult<void> {
+      require_thread();
+      if (spacing < 0) {
+        return SystemResult.Error(Error(1, "Box spacing must be nonnegative"));
+      }
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+      }
+      this.pointer = unsafe { raw.gtk_box_new(orientation == Orientation.Vertical ? 1 : 0, spacing); };
+      unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
+    }
+
+    /** Releases this wrapper's reference without invalidating independently owned children. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Borrows the native handle for callers accepting the unsafe FFI contract. */
+    public const unsafe method raw_handle() raw_ptr<u8> {
+      require_thread();
+      return this.pointer;
+    }
+
+    /** Inserts or reorders a child after a validated sibling without unparenting it. */
+    method place(button: ref Button, sibling: raw_ptr<u8>) SystemResult<void> {
+      require_thread();
+      var child = unsafe { button.raw_handle(); };
+      var parent = unsafe { gtk_widget_get_parent(child); };
+      if (parent != null and parent != this.pointer) {
+        return SystemResult.Error(Error(1, "Button belongs to another parent"));
+      }
+      if (sibling != null and (sibling == child or unsafe { gtk_widget_get_parent(sibling); } != this.pointer)) {
+        return SystemResult.Error(Error(1, "Sibling must be another child of this box"));
+      }
+      if (parent == null) {
+        unsafe { raw.gtk_box_append(this.pointer, child); };
+      }
+      if (unsafe { raw.gtk_widget_get_prev_sibling(child); } != sibling) {
+        unsafe { raw.gtk_box_reorder_child_after(this.pointer, child, sibling); };
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Places a button first, retaining existing native identity and focus. */
+    public method place_first(button: ref Button) SystemResult<void> {
+      return this.place(button, null);
+    }
+
+    /** Places a button after another child of this box. */
+    public method place_after(button: ref Button, previous: ref Button) SystemResult<void> {
+      return this.place(button, unsafe { previous.raw_handle(); });
+    }
+
+    /** Removes this box's reference to a child, returning false if it is not parented here. */
+    public method remove(button: ref Button) bool {
+      require_thread();
+      var child = unsafe { button.raw_handle(); };
+      if (unsafe { gtk_widget_get_parent(child); } != this.pointer) {
+        return false;
+      }
+      unsafe { raw.gtk_box_remove(this.pointer, child); };
+      return true;
+    }
+
+    /** Reports whether a button is the first child of this box. */
+    public const method is_first(button: ref Button) bool {
+      require_thread();
+      var child = unsafe { button.raw_handle(); };
+      return unsafe { gtk_widget_get_parent(child); } == this.pointer and unsafe { raw.gtk_widget_get_prev_sibling(child); } == null;
+    }
+
+    /** Reports whether two buttons are consecutive children of this box. */
+    public const method follows(button: ref Button, previous: ref Button) bool {
+      require_thread();
+      var child = unsafe { button.raw_handle(); };
+      return unsafe { gtk_widget_get_parent(child); } == this.pointer and unsafe { raw.gtk_widget_get_prev_sibling(child); } == unsafe { previous.raw_handle(); };
     }
   }
 
@@ -244,6 +345,18 @@ public module gtk {
       var child = unsafe { button.raw_handle(); };
       if (unsafe { gtk_widget_get_parent(child); } != null) {
         return SystemResult.Error(Error(1, "Button already has a parent"));
+      }
+      unsafe { raw.gtk_window_set_child(this.pointer, child); };
+      return SystemResult.Ok;
+    }
+
+    /** Parents an unparented box while preserving both wrappers' independent references. */
+    public method set_box(box: ref Box) SystemResult<void> {
+      require_thread();
+      try this.check_open();
+      var child = unsafe { box.raw_handle(); };
+      if (unsafe { gtk_widget_get_parent(child); } != null) {
+        return SystemResult.Error(Error(1, "Box already has a parent"));
       }
       unsafe { raw.gtk_window_set_child(this.pointer, child); };
       return SystemResult.Ok;

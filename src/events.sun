@@ -1,5 +1,5 @@
 using std;
-/** Dispatches typed Sun callbacks after native GTK events have been queued. */
+/** Provides native event queues and an optional imperative callback loop. */
 public module gtk {
   /** Allocates stable native event storage retaining its application. */
   extern "C" function sg_loop_new(app: raw_ptr<u8>) raw_ptr<u8>;
@@ -52,7 +52,7 @@ public module gtk {
   /** Disconnects and releases an adapter or timer. */
   extern "C" function sg_loop_source_free(source: raw_ptr<u8>) void;
 
-  /** Identifies the kind of event being delivered to a callback. */
+  /** Identifies a native event category for polling or callback delivery. */
   public enum EventKind { Clicked, Closed, Timer }
 
   /** Owns a reference to stable native storage without owning any Sun callbacks. */
@@ -96,7 +96,7 @@ public module gtk {
     }
   }
 
-  /** An opaque loop-specific identity; dropping it does not disconnect a handler. */
+  /** An opaque dispatcher-specific identity; dropping it does not disconnect its source. */
   public class RegistrationId {
     var owner: u64;
     var number: u64;
@@ -104,6 +104,11 @@ public module gtk {
     init(seed: IdSeed) {
       this.owner = seed.owner;
       this.number = seed.number;
+    }
+
+    /** Compares opaque source identities, including their owning queue. */
+    public const method equals(other: const ref RegistrationId) bool {
+      return this.owner == other.owner and this.number == other.number;
     }
 
     /** Copies the identifier explicitly, without retaining the event source. */
@@ -115,6 +120,144 @@ public module gtk {
   /** Builds an identity for one reservation without exposing a public numeric constructor. */
   function registration_id(core: ref LoopCore, number: u64) RegistrationId {
     return RegistrationId(IdSeed(unsafe { sg_loop_identity(core.pointer); }, number));
+  }
+
+  /** Owns one installed native subscription without storing application callbacks. */
+  class QueuedSource {
+    var number: u64;
+    var kind: u32;
+    var pointer: raw_ptr<u8>;
+    /** Adopts a signal adapter or one-shot timer. */
+    init(number: u64, kind: u32, pointer: raw_ptr<u8>) {
+      this.number = number;
+      this.kind = kind;
+      this.pointer = pointer;
+    }
+
+    /** Disconnects the source before releasing its retained emitter and queue. */
+    deinit() {
+      require_thread();
+      unsafe { sg_loop_source_free(this.pointer); };
+    }
+  }
+
+  /** Describes one native delivery without borrowing widgets or application state. */
+  public class NativeEvent {
+    var id: RegistrationId;
+    var event_kind: EventKind;
+    /** Takes an opaque identity and its native event category. */
+    init(id: RegistrationId, kind: EventKind) {
+      this.id = id;
+      this.event_kind = kind;
+    }
+
+    /** Returns an explicit copy of the source identity. */
+    public const method registration() RegistrationId {
+      return this.id.copy();
+    }
+
+    /** Reports whether a click, window removal, or timeout occurred. */
+    public const method kind() EventKind {
+      return this.event_kind;
+    }
+  }
+
+  /** Owns native FIFO delivery; consumers decide batching, state updates, and shutdown. */
+  public class EventQueue {
+    var core: LoopCore;
+    var sources: Vec<QueuedSource>;
+    /** Retains the application and acquires exclusive default-context dispatch. */
+    init(application: ref Application) SystemResult<void> {
+      this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
+      var a = make_heap_allocator();
+      this.sources = Vec<QueuedSource>(a, 8);
+      if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
+        return SystemResult.Error(Error(1, "Another event dispatcher owns the GTK context"));
+      }
+    }
+
+    /** Cancels subscriptions, discards pending events, and releases dispatch ownership. */
+    deinit() {
+      require_thread();
+      this.sources.clear();
+      unsafe { sg_loop_finish(this.core.pointer); };
+    }
+
+    /** Installs a signal adapter retaining its emitter independently of its wrapper. */
+    method connect(kind: u32, emitter: raw_ptr<u8>) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var source = unsafe { sg_loop_connect(this.core.pointer, number, kind, emitter); };
+      if (source == null) {
+        return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
+      }
+      this.sources.push(QueuedSource(number, kind, source));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Queues clicks without invoking Sun code from GTK callbacks. */
+    public method on_clicked(button: ref Button) SystemResult<RegistrationId> {
+      return this.connect(1, unsafe { button.raw_handle(); });
+    }
+
+    /** Queues one removal notification for a window belonging to this application. */
+    public method on_closed(window: ref Window) SystemResult<RegistrationId> {
+      return this.connect(2, unsafe { window.raw_handle(); });
+    }
+
+    /** Queues a one-shot timeout; zero schedules a future native dispatch turn. */
+    public method after(delay_ms: u32) SystemResult<RegistrationId> {
+      var number = try this.core.reserve();
+      var source = unsafe { sg_loop_timer(this.core.pointer, number, delay_ms); };
+      this.sources.push(QueuedSource(number, 3, source));
+      return SystemResult.Ok(registration_id(this.core, number));
+    }
+
+    /** Cancels future and queued deliveries; cancellation within this queue is idempotent. */
+    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
+      try validate_id(this.core, id);
+      for (var i: i64 = 0; i < this.sources.size(); i += 1) {
+        if (this.sources[i].number == id.number) {
+          match this.sources.remove(i) {
+            AccessResult.Ok(_) => {},
+            AccessResult.OutOfBounds(_) => {}
+          };
+          break;
+        }
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Takes the next live delivery, skipping canceled sources and consuming one-shot sources. */
+    public method next() Option<NativeEvent> {
+      require_thread();
+      while (true) {
+        var number = unsafe { sg_loop_pop(this.core.pointer, 0); };
+        if (number == 0) {
+          return Option.None;
+        }
+        for (var i: i64 = 0; i < this.sources.size(); i += 1) {
+          if (this.sources[i].number == number) {
+            var kind = this.sources[i].kind;
+            var id = registration_id(this.core, number);
+            if (kind != 1) {
+              match this.sources.remove(i) {
+                AccessResult.Ok(_) => {},
+                AccessResult.OutOfBounds(_) => {}
+              };
+            }
+            return Option.Some(NativeEvent(id, kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer)));
+          }
+        }
+      }
+      return Option.None;
+    }
+
+    /** Services GTK once, blocking only when requested and no deliveries are queued. */
+    public method iterate(block: bool) void {
+      require_thread();
+      var pending = unsafe { sg_loop_pending(this.core.pointer); };
+      unsafe { sg_loop_iterate(this.core.pointer, block and pending == 0 ? 1 : 0); };
+    }
   }
 
   /** Stores a typed callback and owns its staged emitter or installed native source. */

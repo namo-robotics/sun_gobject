@@ -460,8 +460,147 @@ module event_checks {
     return SystemResult.Ok;
   }
 
+  /** Checks one FIFO delivery without exposing native pointers or application state. */
+  function delivery(queue: ref gtk.EventQueue, expected: const ref gtk.RegistrationId, kind: gtk.EventKind) SystemResult<void> {
+    match queue.next() {
+      Option.Some(event) => {
+        var id = event.registration();
+        try expect(id.equals(expected) and event.kind() == kind, "Native queue delivery order or kind differs");
+      },
+      Option.None => {
+        return SystemResult.Error(Error(1, "Native queue lost a delivery"));
+      }
+    };
+    return SystemResult.Ok;
+  }
+
+  /** Exercises state-free dispatch, cancellation, retained emitters, and windowless timers. */
+  function native_queue() SystemResult<void> {
+    if (true) {
+      var id = String("org.sunlang.Events.Queue");
+      var app = try gtk.Application(id);
+      unsafe { sg_test_hold_application(app.raw_handle()); };
+      if (true) {
+        var window = gtk.Window(app);
+        var label = String("queued");
+        var first = try gtk.Button(label);
+        var second = try gtk.Button(label);
+        var box = try gtk.Box(gtk.Orientation.Vertical, 8);
+        try window.set_box(box);
+        try box.place_first(first);
+        try box.place_after(second, first);
+        try expect(box.is_first(first) and box.follows(second, first), "Checked box placement differs");
+        match window.set_child(second) {
+          SystemResult.Ok => {
+            return SystemResult.Error(Error(1, "Parented button accepted by window"));
+          },
+          SystemResult.Error(_) => {}
+        };
+        var other_box = try gtk.Box(gtk.Orientation.Horizontal, 0);
+        match other_box.place_first(first) {
+          SystemResult.Ok => {
+            return SystemResult.Error(Error(1, "Foreign parent accepted by box"));
+          },
+          SystemResult.Error(_) => {}
+        };
+        unsafe {
+          sg_test_watch_object(first.raw_handle());
+          sg_test_watch_object(second.raw_handle());
+          sg_test_watch_object(box.raw_handle());
+          sg_test_watch_object(window.raw_handle());
+        };
+        var queue = try gtk.EventQueue(app);
+        match gtk.EventQueue(app) {
+          SystemResult.Ok(_) => {
+            return SystemResult.Error(Error(1, "Nested queue acquired native dispatch"));
+          },
+          SystemResult.Error(_) => {}
+        };
+        var a = try queue.on_clicked(first);
+        var b = try queue.on_clicked(second);
+        second.click();
+        first.click();
+        second.click();
+        try delivery(queue, b, gtk.EventKind.Clicked);
+        try delivery(queue, a, gtk.EventKind.Clicked);
+        try delivery(queue, b, gtk.EventKind.Clicked);
+        first.click();
+        try queue.disconnect(a);
+        try queue.disconnect(a);
+        match queue.next() {
+          Option.Some(_) => {
+            return SystemResult.Error(Error(1, "Canceled native event was delivered"));
+          },
+          Option.None => {}
+        };
+        var other_id = String("org.sunlang.Events.QueueForeign");
+        var other_app = try gtk.Application(other_id);
+        var legacy = gtk.EventLoop<i32>(other_app);
+        var foreign = try legacy.after(60000, unused_queue_callback);
+        match queue.disconnect(foreign) {
+          SystemResult.Ok => {
+            return SystemResult.Error(Error(1, "Foreign queue identity accepted"));
+          },
+          SystemResult.Error(_) => {}
+        };
+        if (true) {
+          var temporary = try gtk.Button(label);
+          var token = try queue.on_clicked(temporary);
+          temporary.click();
+        }
+        match queue.next() {
+          Option.Some(event) => {
+            var token = event.registration();
+            try queue.disconnect(token);
+          },
+          Option.None => {
+            return SystemResult.Error(Error(1, "Queue did not retain emitter"));
+          }
+        };
+        var close_id = try queue.on_closed(window);
+        window.close();
+        try delivery(queue, close_id, gtk.EventKind.Closed);
+        var timer = try queue.after(0);
+        var received = false;
+        while (received == false) {
+          queue.iterate(true);
+          match queue.next() {
+            Option.Some(event) => {
+              var token = event.registration();
+              try expect(token.equals(timer) and event.kind() == gtk.EventKind.Timer, "Windowless timer was lost");
+              received = true;
+            },
+            Option.None => {}
+          };
+        }
+        try queue.disconnect(timer);
+        try expect(box.remove(second), "Box could not remove owned child");
+        try second.set_label(label);
+        try expect(box.remove(second) == false, "Repeated child removal changed ownership");
+        // Drop with a pending click and live timer to exercise resource cleanup.
+        second.click();
+        var pending = try queue.after(60000);
+      }
+      try expect(unsafe { sg_test_watched_objects(); } == 0, "Native queue retained widgets after destruction");
+      // Destruction must release exclusive dispatch for the next consumer.
+      if (true) {
+        var next = try gtk.EventQueue(app);
+      }
+    }
+    try expect(unsafe { sg_test_application_balanced(); } != 0, "Native queue retained its application");
+    return SystemResult.Ok;
+  }
+
+  /** Supplies a callback type only for the foreign-identity rejection check. */
+  function unused_queue_callback(state: ref i32, context: ref gtk.EventContext<i32>) SystemResult<void> {
+    return SystemResult.Ok;
+  }
+
   /** Selects one isolated scenario by its test-facing name. */
   public function run(name: const ref String) SystemResult<void> {
+    if (name.equals_literal("native_queue")) {
+      return native_queue();
+    }
     if (name.equals_literal("cleanup")) {
       return cleanup();
     }

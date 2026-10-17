@@ -13,6 +13,13 @@ module event_loop_tests {
     return checks.Result.Ok(try std.test.expect_system(command.output()));
   }
 
+  /** Checks state-independent FIFO delivery, widget ownership, and consumer-controlled lifetime. */
+  test_function native_queue() checks.Result<void> {
+    var output = try scenario("native_queue");
+    try checks.success(output);
+    try std.test.assert(output.stdout().contains("Event scenario passed"));
+  }
+
   /** Checks FIFO handlers, queued cancellation, and independent polling. */
   test_function ordering() checks.Result<void> {
     var output = try scenario("ordering");

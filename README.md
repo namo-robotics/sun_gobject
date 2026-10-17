@@ -2,8 +2,8 @@
 
 Sun-native bindings for GLib, GObject, GIO, and GTK4, with a GIR generator,
 explicit ownership helpers, and a small safe GTK API. The GTK layer provides
-applications, windows, buttons, named event callbacks, and timers without requiring
-`unsafe` blocks in application code.
+applications, windows, buttons, box containers, native event queues, and timers
+without requiring `unsafe` blocks in application code.
 
 Support currently targets **native x86_64 Linux GNU** and a curated subset of the
 upstream APIs. General widget casts, arbitrary signals, captured closures,
@@ -48,10 +48,34 @@ test with:
 
 ## Key examples
 
+### Integrate a UI framework
+
+`gtk.EventQueue` provides FIFO native events without owning application state or
+choosing render batches and shutdown policy. For example, after creating `app`
+and `button`:
+
+```sun
+var events = try gtk.EventQueue(app);
+var clicked = try events.on_clicked(button);
+events.iterate(false);
+var event = events.next();
+```
+
+`next()` returns `Option<gtk.NativeEvent>` with a kind and opaque registration ID.
+The queue also supports `on_closed`, one-shot `after`, and `disconnect`. It retains
+its sources and application, runs no application callbacks, and stays usable
+without windows. Only one queue or callback loop may dispatch the default GTK
+context at a time; dropping the queue cancels its sources and releases dispatch.
+
+[sun_ui](https://github.com/namo-robotics/sun_ui) builds on these mechanisms to own
+application state, semantic messages, view reconciliation, rendering, and lifecycle
+policy. Its core remains independent of GTK.
+
 ### Handle a button click
 
 Import `stdlib.moon`, `sun_gobject.moon`, and `sun_gtk.moon`. Keep owned widgets in
-application state and register named callbacks with `gtk.EventLoop<State>`:
+application state and register named callbacks with the optional imperative
+`gtk.EventLoop<State>` convenience API:
 
 ```sun
 /** Updates the button after native signal dispatch has returned. */
@@ -112,11 +136,13 @@ flowchart TD
     Config[Selection and overrides XML] --> Generator
     Generator --> Raw[Generated raw Sun bindings]
     Raw --> Support[Ownership and property helpers]
-    Raw --> GTK[Safe GTK widgets and event loop]
+    Raw --> GTK[Safe GTK widgets and native events]
     Support --> GTK
     Native[Native C adapters] --> Support
     Native --> GTK
-    GTK --> App[Sun application]
+    GTK --> App[Imperative Sun application]
+    GTK --> UI[sun_ui GTK backend]
+    UI --> Session[sun_ui state, reconciliation, and rendering]
 ```
 
 | Component | Purpose |
@@ -124,8 +150,8 @@ flowchart TD
 | [`src/generator/`](src/generator/) | Read XML, load versioned GIR dependencies, translate supported C ABI types, and emit bindings. |
 | [`bindings/`](bindings/) | Select supported declarations in `selection.xml` and apply explicit metadata corrections in `overrides.xml`. |
 | [`src/support.sun`](src/support.sun) | Provide low-level reference ownership, property helpers, and signal connections. |
-| [`src/gtk.sun`](src/gtk.sun) | Provide owned application, window, and button wrappers with checked operations. |
-| [`src/events.sun`](src/events.sun) | Dispatch typed callbacks, deferred commands, and timers on the main thread. |
+| [`src/gtk.sun`](src/gtk.sun) | Provide owned widgets, box placement, and focus operations with checked native contracts. |
+| [`src/events.sun`](src/events.sun) | Expose state-independent native events and timers, plus an optional imperative callback loop. |
 | [`native/`](native/) | Implement C signal adapters, event storage, UTF-8 validation, and the Linux main-thread guard. |
 | [`tools/build.sun`](tools/build.sun) | Orchestrate generation, Sun compilation, tests, and installation. |
 | [`tests/`](tests/) | Test the generator, runtime helpers, event loop, GTK demo, and an isolated installed consumer. |
@@ -144,8 +170,10 @@ types, and transferred references.
 The safe GTK layer owns native references, validates text and parenting, rejects
 operations on closed windows, and enforces the initial Linux thread at runtime.
 Native adapters queue events for Sun callbacks instead of storing Sun stack
-pointers in GTK. Event loops are single-use and release registrations, timers,
-and queued work when they exit. Registration and dispatch may allocate.
+pointers in GTK. The optional callback loop adds named handlers, deferred commands,
+and automatic exit after its last window closes. It is single-use and cleans up
+on exit; UI frameworks can use the native queue directly to define their own
+policy. Registration and dispatch may allocate.
 
 Compiler limitations and reproducible examples are recorded in
 [sun_feedback.md](sun_feedback.md). Inspired by
