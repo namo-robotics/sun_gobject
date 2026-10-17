@@ -188,7 +188,7 @@ public module gir {
 
   /** Emits original GIR attributes as a single escaped documentation line. */
   function annotations(doc: const ref xml.Document, node: i64, label: const ref String) String {
-    var result = String("    // ");
+    var result = String("  // ");
     result.append(label);
     for (var i: i64 = 0; i < doc.nodes[node].attributes.size(); i += 1) {
       var key = quote(doc.nodes[node].attributes[i].name);
@@ -209,10 +209,10 @@ public module gir {
     if (fallible.equals_literal("1")) {
       die("selected throwing signature needs explicit GError** support");
     }
-    var result = String("    public extern \"C\" function ");
+    var result = String("  public extern \"C\" function ");
     result.append(symbol);
     result.append("(");
-    var documentation = String("    // Native ABI; ownership and nullability below are caller contracts.\n");
+    var documentation = String("  // Native ABI; ownership and nullability below are caller contracts.\n");
     var parameters = child(doc, node, "parameters");
     var count: i64 = 0;
     if (parameters >= 0) {
