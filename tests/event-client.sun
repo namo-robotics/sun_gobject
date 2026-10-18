@@ -1,6 +1,8 @@
 using std;
+
 /** Runs isolated main-thread GTK event-loop scenarios for the Sun test suite. */
 module event_checks {
+
   /** Reports an invariant failure without terminating callback cleanup. */
   function expect(condition: bool, message: static_ptr<u8>) SystemResult<void> {
     if (condition == false) {
@@ -8,6 +10,7 @@ module event_checks {
     }
     return SystemResult.Ok;
   }
+
   /** Owns widgets and explicit state shared by each scenario's callbacks. */
   class State {
     var window: gtk.Window;
@@ -18,6 +21,7 @@ module event_checks {
     var count: i32 = 0;
     var inside: bool = false;
     var mark: std.time.Instant;
+
     /** Creates an application window without requiring it to be displayed. */
     init(app: ref gtk.Application) SystemResult<void> {
       this.window = gtk.Window(app);
@@ -28,6 +32,7 @@ module event_checks {
       this.mark = std.time.now();
     }
   }
+
   /** Fails if a cancelled or newly registered handler receives an old event. */
   function unexpected(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
     return SystemResult.Error(Error(1, "Unexpected callback delivery"));
@@ -421,6 +426,9 @@ module event_checks {
   /** Checks loop reference balance independently of GTK registration ownership. */
   extern "C" function sg_test_application_balanced() i32;
 
+  /** Verifies native controlled setters preserve the editable cursor and selection. */
+  extern "C" function sg_test_entry_selection() i32;
+
   /** Checks cleanup on success, callback failure, and dropping an unrun loop. */
   function cleanup() SystemResult<void> {
     for (var mode: i32 = 0; mode < 3; mode += 1) {
@@ -428,6 +436,7 @@ module event_checks {
         var id = String("org.sunlang.Events.Cleanup");
         id.append(mode);
         var app = try gtk.Application(id);
+        try expect(unsafe { sg_test_entry_selection(); } != 0, "Unchanged text reset cursor or selection");
         unsafe { sg_test_hold_application(app.raw_handle()); };
         var state = try State(app);
         unsafe {
@@ -637,6 +646,7 @@ module event_checks {
     return SystemResult.Error(Error(1, "Unknown event-loop scenario"));
   }
 }
+
 /** Runs one main-thread scenario and reports failures to its parent Sun test. */
 function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   var a = make_heap_allocator();

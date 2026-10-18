@@ -1,3 +1,4 @@
+#include "../view.h"
 #include <glib-object.h>
 static int finalized;
 /** Records finalization without modifying the object being destroyed. */
@@ -47,4 +48,19 @@ int sg_test_application_balanced(void) {
     g_object_unref(held_application);
     held_application = NULL;
     return balanced;
+}
+
+/** Checks that unchanged controlled text preserves both cursor and selection. */
+int sg_test_entry_selection(void) {
+    GtkWidget *entry = sg_view_new(7);
+    sg_view_text(entry, "abcdef");
+    gtk_editable_set_position(GTK_EDITABLE(entry), 3);
+    sg_view_text(entry, "abcdef");
+    gboolean cursor = gtk_editable_get_position(GTK_EDITABLE(entry)) == 3;
+    gtk_editable_select_region(GTK_EDITABLE(entry), 1, 4);
+    sg_view_text(entry, "abcdef");
+    int start = 0, end = 0;
+    gboolean selected = gtk_editable_get_selection_bounds(GTK_EDITABLE(entry), &start, &end);
+    g_object_unref(entry);
+    return cursor && selected && start == 1 && end == 4;
 }
