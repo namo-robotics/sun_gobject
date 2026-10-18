@@ -1,6 +1,8 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Gives a callback owned staging storage without borrowing the active registry. */
   public class EventContext<State> {
     var core: LoopCore;
@@ -8,6 +10,7 @@ public module gtk {
     var event: EventKind;
     var commands: Vec<EventCommand<State>>;
     var stopped: bool = false;
+
     /** Creates a dispatch-only context from private loop storage. */
     init(core: LoopCore, current: RegistrationId, kind: u32) {
       this.core = core;

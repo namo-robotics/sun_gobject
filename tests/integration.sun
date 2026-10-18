@@ -1,6 +1,8 @@
 using std;
+
 /** Exercises the installed consumer and the real GTK demo through native tests. */
 module integration_tests {
+
   /** Exercises checked drawing and export widgets under a real GTK main context. */
   test_function gtk_drawing_widgets() checks.Result<void> {
     var fixture = try checks.Fixture();

@@ -1,9 +1,12 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a GTK label independently of its parent, with validated UTF-8 text. */
   public class Label {
     var pointer: raw_ptr<u8> = null;
+
     /** Creates a label on the main thread, rejecting invalid text or unavailable displays. */
     init(text: ref String) SystemResult<void> {
       require_thread();

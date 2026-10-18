@@ -1,9 +1,12 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a reference to stable native storage without owning any Sun callbacks. */
   class LoopCore {
     var pointer: raw_ptr<u8>;
+
     /** Adopts one reference produced by the native queue helpers. */
     init(pointer: raw_ptr<u8>) {
       this.pointer = pointer;

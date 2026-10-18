@@ -1,6 +1,8 @@
 using std;
+
 /** Runs a GTK event loop using owned widgets and checked operations. */
 module demo {
+
   /** Exercises a real button event and rejects invalid widget operations. */
   function check_widgets(window: ref gtk.Window, button: ref gtk.Button) SystemResult<void> {
     var original = button.label();
@@ -48,6 +50,7 @@ module demo {
     var automated: bool;
     var clicked: bool = false;
     var closed: bool = false;
+
     /** Builds the window and button before transferring the application to the loop. */
     init(app: ref gtk.Application, automated: bool) SystemResult<void> {
       this.window = gtk.Window(app);
@@ -123,6 +126,7 @@ module demo {
     return SystemResult.Ok;
   }
 }
+
 /** Runs the interactive demo or its bounded safe-API acceptance scenario. */
 function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   var a = make_heap_allocator();

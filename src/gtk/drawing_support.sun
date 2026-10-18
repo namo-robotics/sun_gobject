@@ -1,6 +1,8 @@
 using std;
+
 /** Provides checked labels, vector drawing surfaces, and native save dialogs. */
 public module gtk {
+
   /** Creates a GTK label after validation. */
   extern "C" function gtk_label_new(text: raw_ptr<u8>) raw_ptr<u8>;
 

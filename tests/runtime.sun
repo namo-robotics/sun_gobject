@@ -1,6 +1,8 @@
 using std;
+
 /** Exercises ownership, typed callbacks, properties, strings, and native ABI. */
 module runtime_tests {
+
   var calls: i32 = 0;
   var cleanups: i32 = 0;
   /** Counts notifications delivered through the typed adapter. */

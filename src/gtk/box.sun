@@ -1,9 +1,12 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a GTK box independently of its parent and its child wrappers. */
   public class Box {
     var pointer: raw_ptr<u8> = null;
+
     /** Creates a layout container with nonnegative spacing between children. */
     init(orientation: Orientation, spacing: i32) SystemResult<void> {
       require_thread();

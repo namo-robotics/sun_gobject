@@ -1,11 +1,14 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns an application and callback registry for one main-thread dispatch session. */
   public class EventLoop<State> {
     var application: Application;
     var core: LoopCore;
     var handlers: Vec<Handler<State>>;
+
     /** Takes the application and allocates registry and native queue storage. */
     init(application: Application) {
       require_thread();

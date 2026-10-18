@@ -1,12 +1,15 @@
 using std;
+
 /** Provides isolated fixtures and bounded commands for the native test suite. */
 module checks {
+
   /** Carries assertion, system, JSON, and bounds failures to the test runner. */
   public enum Result<T> { Ok(T), Assertion(std.test.AssertionError), System(Error), Json(JsonError), Bounds(IndexOutOfBoundsError) }
 
   /** Owns a unique workspace scratch directory and removes it on scope exit. */
   public class Fixture {
     public var path: String;
+
     /** Creates a directory without changing the process working directory. */
     init() checks.Result<void> {
       var a = make_heap_allocator();

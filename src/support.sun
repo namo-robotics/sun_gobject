@@ -1,10 +1,13 @@
 using std;
+
 /** Provides explicit ownership and property operations over raw GObject pointers. */
 public module gobject {
+
   /** Takes one already-owned reference. Construction from a raw pointer is an
      * unsafe ownership contract: do not adopt a borrowed reference. */
   public class OwnedObject {
     var pointer: raw_ptr<u8>;
+
     /** Initializes OwnedObject with the supplied owned values or native pointer contract. */
     init(pointer: raw_ptr<u8>) {
       this.pointer = pointer;
@@ -29,6 +32,7 @@ public module gobject {
       return p;
     }
   }
+
   /** Adds a native reference; the caller must supply a live GObject or null. */
   public function retain_borrowed(pointer: raw_ptr<u8>) OwnedObject {
     if (pointer != null) {
@@ -44,6 +48,7 @@ public module gobject {
     }
     return OwnedObject(pointer);
   }
+
   // GValue's data union is opaque. native/signals.c verifies size/offsets.
   class Value {
     var type: u64 = 0;
@@ -104,18 +109,22 @@ public module gobject {
     unsafe { raw.g_value_unset(p); };
     return Option.Some(copy);
   }
+
   /** Exposes named-function callbacks and deterministic signal disconnection. */
   public module signals {
+
     /** Connects a void signal with no arguments, taking ownership of userdata cleanup. */
     public extern "C" function sg_connect_void(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
 
     /** Connects a property notification and releases userdata exactly once. */
     public extern "C" function sg_connect_notify(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
+
     /** Keeps the emitter alive, disconnecting before releasing it. Callbacks
          * must be module functions; userdata must outlive the connection. */
     public class Connection {
       var object: raw_ptr<u8>;
       var id: u64;
+
       /** Initializes Connection with the supplied owned values or native pointer contract. */
       init(object: raw_ptr<u8>, id: u64) {
         this.object = object;
@@ -147,11 +156,14 @@ public module gobject {
     }
   }
 }
+
 /** Owns GLib allocations and errors with explicit nullable pointer contracts. */
 public module glib {
+
   /** Owns a string allocated with GLib allocation functions. */
   public class OwnedCString {
     var pointer: raw_ptr<u8>;
+
     /** Initializes OwnedCString with the supplied owned values or native pointer contract. */
     init(pointer: raw_ptr<u8>) {
       this.pointer = pointer;
@@ -176,6 +188,7 @@ public module glib {
       return Option.Some(from_c_str(a, this.pointer));
     }
   }
+
   /** Describes the native GError record; its offsets are checked against C headers. */
   public class ErrorRecord {
     public var domain: u32;
@@ -186,6 +199,7 @@ public module glib {
   /** Owns a nullable GError and releases it on destruction. */
   public class OwnedError {
     var pointer: raw_ptr<u8>;
+
     /** Initializes OwnedError with the supplied owned values or native pointer contract. */
     init(pointer: raw_ptr<u8>) {
       this.pointer = pointer;

@@ -1,6 +1,8 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Stores a typed callback and owns its staged emitter or installed native source. */
   class Handler<State> {
     var number: u64;
@@ -9,6 +11,7 @@ public module gtk {
     var emitter: raw_ptr<u8>;
     var source: raw_ptr<u8> = null;
     var callback: function (ref State, ref EventContext<State>) SystemResult<void>;
+
     /** Retains an emitter until this handler is installed or discarded. */
     init(number: u64, kind: u32, delay: u32, emitter: raw_ptr<u8>, callback: function (ref State, ref EventContext<State>) SystemResult<void>) {
       this.number = number;

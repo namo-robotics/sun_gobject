@@ -1,9 +1,12 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a drawing widget and its independently retained SVG document on the GTK thread. */
   public class DrawingArea {
     var pointer: raw_ptr<u8> = null;
+
     /** Creates an initially empty surface. */
     init() SystemResult<void> {
       require_thread();

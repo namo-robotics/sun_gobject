@@ -1,6 +1,8 @@
 using std;
+
 /** Provides diagnostic, byte-string, and file helpers for the generator. */
 public module sg {
+
   /** Terminates the generator after a fatal diagnostic. */
   extern "C" function exit(code: i32) void;
 

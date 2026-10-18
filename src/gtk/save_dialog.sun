@@ -1,10 +1,13 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a reusable native save dialog; responses are polled and never run application handlers. */
   public class SaveDialog {
     var pointer: raw_ptr<u8> = null;
     var parent: raw_ptr<u8> = null;
+
     /** Creates an idle dialog wrapper on the main thread. */
     init() {
       require_thread();

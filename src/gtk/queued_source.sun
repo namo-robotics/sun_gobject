@@ -1,11 +1,14 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns one installed native subscription without storing application callbacks. */
   class QueuedSource {
     var number: u64;
     var kind: u32;
     var pointer: raw_ptr<u8>;
+
     /** Adopts a signal adapter or one-shot timer. */
     init(number: u64, kind: u32, pointer: raw_ptr<u8>) {
       this.number = number;

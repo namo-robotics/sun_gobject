@@ -1,6 +1,8 @@
 using std;
+
 /** Runs event-loop scenarios in separate GTK main-thread processes. */
 module event_loop_tests {
+
   /** Starts one bounded display-backed client with core dumps disabled. */
   function scenario(name: static_ptr<u8>) checks.Result<std.process.Output> {
     var a = make_heap_allocator();

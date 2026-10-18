@@ -1,12 +1,15 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module svg {
+
   /** Describes a native librsvg viewport; rendering requires valid borrowed native handles. */
   public class Viewport {
     var x: f64 = 0.0;
     var y: f64 = 0.0;
     var width: f64;
     var height: f64;
+
     /** Records the requested output dimensions, validated when rendering. */
     init(width: f64, height: f64) {
       this.width = width;

@@ -1,6 +1,8 @@
 using std;
+
 /** Checks XML validation and GIR generation through the public command line. */
 module generator_tests {
+
   /** Generates fixtures, preferring any locally modified input files. */
   function generate(fixture: ref checks.Fixture) checks.Result<std.process.Output> {
     return checks.command(fixture, "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun-gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture");

@@ -1,10 +1,13 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a button reference and its click queue independently of widget parenting. */
   public class Button {
     var pointer: raw_ptr<u8> = null;
     var events: raw_ptr<u8> = null;
+
     /** Creates a labeled button after validating its text and initializing GTK. */
     init(label: ref String) SystemResult<void> {
       require_thread();

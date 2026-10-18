@@ -1,10 +1,13 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Restricts registration identity construction to this module. */
   class IdSeed {
     var owner: u64;
     var number: u64;
+
     /** Stores the owner and registration number without retaining native resources. */
     init(owner: u64, number: u64) {
       this.owner = owner;

@@ -1,7 +1,9 @@
 using std;
 using sg;
+
 /** Loads versioned GIR documents and translates the selected native ABI. */
 public module gir {
+
   /** Checks whether a candidate GIR file is readable. */
   extern "C" function access(path: raw_ptr<u8>, mode: i32) i32;
 
@@ -19,12 +21,14 @@ public module gir {
     unsafe { g_free(p); };
     return result;
   }
+
   /** Owns the dependency closure and provenance of loaded GIR namespaces. */
   public class Repository {
     public var dirs: Vec<String>;
     public var keys: Vec<String>;
     public var hashes: Vec<String>;
     public var docs: Vec<xml.Document>;
+
     /** Initializes Repository with the supplied owned values or native pointer contract. */
     init() {
       var a = make_heap_allocator();
@@ -101,6 +105,7 @@ public module gir {
       }
     }
   }
+
   /** Finds the first direct child element of the requested kind. */
   public function child(doc: const ref xml.Document, parent: i64, kind: static_ptr<u8>) i64 {
     for (var i = parent + 1; i < doc.nodes.size(); i += 1) {

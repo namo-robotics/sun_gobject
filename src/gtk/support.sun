@@ -1,6 +1,8 @@
 using std;
+
 /** Owns GTK objects and delivers button events without exposing callback pointers. */
 public module gtk {
+
   /** Stops execution before a GTK operation on a non-main thread. */
   extern "C" function sg_ui_require_main_thread() void;
 

@@ -1,10 +1,13 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a registered, non-unique GTK application on the main thread. */
   public class Application {
     var pointer: raw_ptr<u8> = null;
     var stopped: bool = false;
+
     /** Initializes GTK and registers a valid application, or reports failure. */
     init(id: ref String) SystemResult<void> {
       require_thread();
