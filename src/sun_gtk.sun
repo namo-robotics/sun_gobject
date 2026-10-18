@@ -1,0 +1,31 @@
+/** Bundles generated GTK declarations with checked GTK and SVG wrappers. */
+manifest {
+  source_files: [
+    "generated/gtk.sun",
+    "gtk/support.sun",
+    "gtk/widget_support.sun",
+    "gtk/widget.sun",
+    "gtk/application.sun",
+    "gtk/button.sun",
+    "gtk/box.sun",
+    "gtk/window.sun",
+    "gtk/event_support.sun",
+    "gtk/loop_core.sun",
+    "gtk/id_seed.sun",
+    "gtk/registration_id.sun",
+    "gtk/queued_source.sun",
+    "gtk/native_event.sun",
+    "gtk/event_queue.sun",
+    "gtk/handler.sun",
+    "gtk/event_context.sun",
+    "gtk/event_loop.sun",
+    "gtk/drawing_support.sun",
+    "gtk/label.sun",
+    "gtk/drawing_area.sun",
+    "gtk/save_dialog.sun",
+    "svg/raw.sun",
+    "svg/viewport.sun",
+    "svg/document.sun"
+  ]
+  libraries: ["sun_gobject.moon", "stdlib.moon"]
+}

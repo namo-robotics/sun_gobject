@@ -156,8 +156,11 @@ flowchart TD
 | [`tools/build.sun`](tools/build.sun) | Orchestrate generation, Sun compilation, tests, and installation. |
 | [`tests/`](tests/) | Test the generator, runtime helpers, event loop, GTK demo, and an isolated installed consumer. |
 
-Generated bindings and reports live in `build/generated/`; native build artifacts
-live in `build/native/`. Reports include `coverage.tsv`, `gir-model.json`, and
+Bundle manifests are maintained in `src/sun_gobject.sun` and `src/sun_gtk.sun`.
+Update their source lists when adding or moving binding files. Generated Sun
+bindings live in `src/generated/` and are ignored by Git. Reports live in
+`build/generated/`; native build artifacts live in
+`build/native/`. Reports include `coverage.tsv`, `gir-model.json`, and
 `provenance.json`, which records compiler, generator, configuration, and GIR input
 information. Generated sources are deterministic for identical inputs and options.
 

@@ -112,6 +112,7 @@ module build_tasks {
     var mkdir = std.process.Command(a, "mkdir");
     mkdir.add_arg("-p");
     mkdir.add_arg("build/generated");
+    mkdir.add_arg("src/generated");
     mkdir.add_arg("tmp");
     try run(mkdir);
     var pwd = std.process.Command(a, "pwd");
@@ -197,8 +198,8 @@ module build_tasks {
     generate.add_arg("bindings/overrides.xml");
     generate.add_arg("--output-dir");
     generate.add_arg("build/generated");
-    generate.add_arg("--support-dir");
-    generate.add_arg("src");
+    generate.add_arg("--source-dir");
+    generate.add_arg("src/generated");
     generate.add_arg("--target");
     generate.add_arg("x86_64-linux-gnu");
     generate.add_arg("--sun-revision");
@@ -211,13 +212,13 @@ module build_tasks {
     core.add_arg("--emit-moon");
     core.add_arg("-o");
     core.add_arg("build/sun_gobject.moon");
-    core.add_arg("build/generated/sun_gobject.sun");
+    core.add_arg("src/sun_gobject.sun");
     try run(core);
     var gtk = try compile(false);
     gtk.add_arg("--emit-moon");
     gtk.add_arg("-o");
     gtk.add_arg("build/sun_gtk.moon");
-    gtk.add_arg("build/generated/sun_gtk.sun");
+    gtk.add_arg("src/sun_gtk.sun");
     try run(gtk);
     println("Compiling GTK demo");
     var demo = try compile(true);

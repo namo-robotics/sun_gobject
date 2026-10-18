@@ -1,4 +1,5 @@
 /build*/
+/src/generated/
 /.toolchain/
 /dist/
 __pycache__/

@@ -1,0 +1,5 @@
+/** Bundles generated GLib, GObject, and GIO declarations with ownership helpers. */
+manifest {
+  source_files: ["generated/glib.sun", "generated/gobject.sun", "generated/gio.sun", "support.sun"]
+  libraries: ["stdlib.moon"]
+}
