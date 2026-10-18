@@ -1,6 +1,85 @@
 using std;
+
 /** Waits briefly for the GTK frame clock during bounded native acceptance checks. */
 extern "C" function g_usleep(microseconds: u64) void;
+
+/** Verifies weighted grid allocation and captured editable values through checked APIs. */
+function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
+  var window = gtk.Window(app);
+  var grid = try gtk.Widget(3);
+  var left = try gtk.Widget(5);
+  var right = try gtk.Widget(5);
+  try grid.track(true, 0, 0, true);
+  try grid.track(true, 2, 1, false);
+  try grid.track(true, 2, 2, false);
+  try left.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
+  try right.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
+  try grid.place_first(left, 0, 0, 1, 1);
+  try grid.place_after(right, left, 0, 1, 1, 1);
+  try window.set_widget(grid);
+  try window.set_default_size(300, 100);
+  try window.present();
+  for (var i: i64 = 0; i < 100 and left.extent(true) == 0; i += 1) {
+    app.iterate(false);
+    unsafe { g_usleep(10000); };
+  }
+  if (left.extent(true) <= 0 or right.extent(true) < left.extent(true) * 2 - 2 or right.extent(true) > left.extent(true) * 2 + 2) {
+    return SystemResult.Error(Error(1, "Weighted tracks did not share remaining space"));
+  }
+  match grid.place_first(grid, 0, 0, 1, 1) {
+    SystemResult.Error(_) => {},
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Grid accepted self parenting"));
+    }
+  };
+  var entry = try gtk.Widget(7);
+  var select = try gtk.Widget(9);
+  var queue = try gtk.EventQueue(app);
+  var entry_id = try queue.on_widget(entry);
+  var select_id = try queue.on_widget(select);
+  var text = String("alpha");
+  try entry.edit(text, 0);
+  text = String("beta");
+  try entry.edit(text, 0);
+  var labels = String("First");
+  var key = String("stable-first");
+  try select.clear_options();
+  try select.add_option(labels, key);
+  labels = String("Second");
+  key = String("stable-second");
+  try select.add_option(labels, key);
+  try select.set_value(0);
+  try select.edit(text, 1);
+  try select.clear_options();
+  labels = String("Replacement");
+  key = String("replacement");
+  try select.add_option(labels, key);
+  for (var i: i64 = 0; i < 3; i += 1) {
+    match queue.next() {
+      Option.Some(event) => {
+        var expected = String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
+        if (not event.text.equals(expected)) {
+          return SystemResult.Error(Error(1, "Native edit snapshot was changed before delivery"));
+        }
+      },
+      Option.None => {
+        return SystemResult.Error(Error(1, "Native edit snapshot was lost"));
+      }
+    };
+  }
+  text = String("programmatic");
+  try entry.set_text(text);
+  match queue.next() {
+    Option.None => {},
+    Option.Some(_) => {
+      return SystemResult.Error(Error(1, "Controlled setter emitted a user edit"));
+    }
+  };
+  try queue.disconnect(entry_id);
+  try queue.disconnect(select_id);
+  window.close();
+  return SystemResult.Ok;
+}
 
 /** Checks ownership, validation, composition, drawing, and chooser cleanup using safe APIs. */
 function run() SystemResult<void> {
@@ -91,6 +170,7 @@ function run() SystemResult<void> {
     },
     SystemResult.Error(_) => {}
   };
+  try declarative_widgets(app);
   println("Checked drawing widgets passed");
   return SystemResult.Ok;
 }

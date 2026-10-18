@@ -1,6 +1,8 @@
 using std;
+
 /** Builds and installs Sun artifacts using separately compiled native libraries. */
 module build_tasks {
+
   /** Runs a command, preserving diagnostics and returning failure to the caller. */
   function capture(command: ref std.process.Command) SystemResult<String> {
     var a = make_heap_allocator();
@@ -141,10 +143,28 @@ module build_tasks {
     return SystemResult.Ok(text);
   }
 
+  /** Checks XML support before compiling products that require it. */
+  function check_xml() SystemResult<void> {
+    var a = make_heap_allocator();
+    var executable = compiler();
+    var probe = std.process.Command(a, executable);
+    probe.add_arg("--dynamic");
+    probe.add_arg("-c");
+    probe.add_arg("-o");
+    probe.add_arg("build/xml-probe");
+    probe.add_arg("tools/xml_probe.sun");
+    if (try probe.status() != 0) {
+      return SystemResult.Error(Error(1, "XML support is required. Update the Sun development package or set SUN_EXECUTABLE to a compiler with std.XmlReader."));
+    }
+    var check = std.process.Command(a, "build/xml-probe");
+    return run(check);
+  }
+
   /** Builds the generator, regenerates bindings, and compiles Sun bundles and programs. */
   public function build() SystemResult<void> {
     var a = make_heap_allocator();
     var version = try prepare();
+    try check_xml();
     println("Compiling GIR generator");
     var generator = try compile(false);
     generator.add_arg("-lglib-2.0");

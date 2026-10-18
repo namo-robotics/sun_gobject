@@ -1,10 +1,13 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns native FIFO delivery; consumers decide batching, state updates, and shutdown. */
   public class EventQueue {
     var core: LoopCore;
     var sources: Vec<QueuedSource>;
+
     /** Retains the application and acquires exclusive default-context dispatch. */
     init(application: ref Application) SystemResult<void> {
       this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
@@ -36,6 +39,16 @@ public module gtk {
     /** Queues clicks without invoking Sun code from GTK callbacks. */
     public method on_clicked(button: ref Button) SystemResult<RegistrationId> {
       return this.connect(1, unsafe { button.raw_handle(); });
+    }
+
+    /** Subscribes to a supported widget's activation or edit signal. */
+    public method on_widget(widget: ref Widget) SystemResult<RegistrationId> {
+      require_thread();
+      var kind: u32 = widget.kind == 6 ? 1 : (widget.kind == 7 ? 4 : (widget.kind == 8 ? 5 : (widget.kind == 9 ? 6 : 0)));
+      if (kind == 0) {
+        return SystemResult.Error(Error(1, "Widget has no edit signal"));
+      }
+      return this.connect(kind, widget.pointer);
     }
 
     /** Queues one removal notification for a window belonging to this application. */
@@ -78,13 +91,17 @@ public module gtk {
           if (this.sources[i].number == number) {
             var kind = this.sources[i].kind;
             var id = registration_id(this.core, number);
-            if (kind != 1) {
+            if (kind == 2 or kind == 3) {
               match this.sources.remove(i) {
                 AccessResult.Ok(_) => {},
                 AccessResult.OutOfBounds(_) => {}
               };
             }
-            return Option.Some(NativeEvent(id, kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer)));
+            var event = NativeEvent(id, kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : (kind == 3 ? EventKind.Timer : (kind == 4 ? EventKind.TextChanged : (kind == 5 ? EventKind.Toggled : EventKind.Selected)))));
+            var a = make_heap_allocator();
+            event.text = from_c_str(a, unsafe { sg_loop_text(this.core.pointer); });
+            event.value = unsafe { sg_loop_value(this.core.pointer); };
+            return Option.Some(event);
           }
         }
       }

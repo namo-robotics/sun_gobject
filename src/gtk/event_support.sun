@@ -1,6 +1,8 @@
 using std;
+
 /** Provides native event queues and an optional imperative callback loop. */
 public module gtk {
+
   /** Allocates stable native event storage retaining its application. */
   extern "C" function sg_loop_new(app: raw_ptr<u8>) raw_ptr<u8>;
 
@@ -53,7 +55,7 @@ public module gtk {
   extern "C" function sg_loop_source_free(source: raw_ptr<u8>) void;
 
   /** Identifies a native event category for polling or callback delivery. */
-  public enum EventKind { Clicked, Closed, Timer }
+  public enum EventKind { Clicked, Closed, Timer, TextChanged, Toggled, Selected }
 
   /** Builds an identity for one reservation without exposing a public numeric constructor. */
   function registration_id(core: ref LoopCore, number: u64) RegistrationId {

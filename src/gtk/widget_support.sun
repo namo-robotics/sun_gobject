@@ -1,0 +1,45 @@
+/** Declares native widget operations used only by checked GTK wrappers. */
+public module gtk {
+
+  /** Creates an independently referenced supported GTK widget. */
+  extern "C" function sg_view_new(kind: i32) raw_ptr<u8>;
+
+  /** Sets validated widget text with edit notifications suppressed. */
+  extern "C" function sg_view_text(widget: raw_ptr<u8>, text: raw_ptr<u8>) void;
+
+  /** Sets a checkbox or selection value with edit notifications suppressed. */
+  extern "C" function sg_view_value(widget: raw_ptr<u8>, value: i32) void;
+
+  /** Clears or appends a select option. */
+  extern "C" function sg_view_options(widget: raw_ptr<u8>, text: raw_ptr<u8>, key: raw_ptr<u8>, clear: i32) void;
+
+  /** Applies validated common layout properties. */
+  extern "C" function sg_view_properties(widget: raw_ptr<u8>, enabled: i32, visible: i32, margin: i32, width: i32, height: i32, horizontal: i32, vertical: i32, expand_x: i32, expand_y: i32, spacing: i32) void;
+
+  /** Validates and performs child insertion or reordering. */
+  extern "C" function sg_view_place(parent: raw_ptr<u8>, child: raw_ptr<u8>, previous: raw_ptr<u8>, row: i32, column: i32, row_span: i32, column_span: i32) i32;
+
+  /** Detaches a widget from its supported parent. */
+  extern "C" function sg_view_remove(child: raw_ptr<u8>) void;
+
+  /** Parents an unparented widget to a window. */
+  extern "C" function sg_view_window(window: raw_ptr<u8>, child: raw_ptr<u8>) i32;
+
+  /** Borrows the latest popped event's captured text. */
+  extern "C" function sg_loop_text(loop: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Reads the latest popped event's captured scalar. */
+  extern "C" function sg_loop_value(loop: raw_ptr<u8>) i32;
+
+  /** Replaces widget-local CSS only after successful parsing. */
+  extern "C" function sg_view_style(widget: raw_ptr<u8>, css: raw_ptr<u8>) i32;
+
+  /** Clears or appends a native grid sizing rule. */
+  extern "C" function sg_view_track(widget: raw_ptr<u8>, horizontal: i32, kind: i32, value: i32, clear: i32) i32;
+
+  /** Emits a native edit using the normal GTK property setter. */
+  extern "C" function sg_view_edit(widget: raw_ptr<u8>, text: raw_ptr<u8>, value: i32) void;
+
+  /** Reads an allocated native dimension. */
+  extern "C" function sg_view_extent(widget: raw_ptr<u8>, horizontal: i32) i32;
+}

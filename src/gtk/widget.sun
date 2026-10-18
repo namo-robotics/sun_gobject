@@ -1,0 +1,177 @@
+using std;
+
+/** Provides checked ownership for heterogeneous declarative GTK widgets. */
+public module gtk {
+
+  /** Owns one GTK widget with operations checked against its construction kind. */
+  public class Widget {
+    var pointer: raw_ptr<u8> = null;
+    var kind: i32;
+
+    /** Creates a supported widget on the GTK main thread. */
+    init(kind: i32) SystemResult<void> {
+      require_thread();
+      if (kind < 0 or kind > 9) {
+        return SystemResult.Error(Error(1, "Unknown widget kind"));
+      }
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize GTK"));
+      }
+      this.kind = kind;
+      this.pointer = unsafe { sg_view_new(kind); };
+    }
+
+    /** Releases the wrapper's independent native reference. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Copies validated text without generating edit events or resetting unchanged entry text. */
+    public method set_text(text: ref String) SystemResult<void> {
+      require_thread();
+      try validate(text);
+      if (this.kind < 5 or this.kind > 8) {
+        return SystemResult.Error(Error(1, "Widget has no text property"));
+      }
+      unsafe { sg_view_text(this.pointer, text.c_str()); };
+      return SystemResult.Ok;
+    }
+
+    /** Sets checkbox or dropdown state without emitting application edits. */
+    public method set_value(value: i32) SystemResult<void> {
+      require_thread();
+      if ((this.kind != 8 and this.kind != 9) or value < -1) {
+        return SystemResult.Error(Error(1, "Invalid widget value"));
+      }
+      unsafe { sg_view_value(this.pointer, value); };
+      return SystemResult.Ok;
+    }
+
+    /** Clears dropdown choices while suppressing selection notifications. */
+    public method clear_options() SystemResult<void> {
+      require_thread();
+      if (this.kind != 9) {
+        return SystemResult.Error(Error(1, "Widget is not a select"));
+      }
+      unsafe { sg_view_options(this.pointer, null, null, 1); };
+      return SystemResult.Ok;
+    }
+
+    /** Copies one validated label into a dropdown model. */
+    public method add_option(text: ref String, key: ref String) SystemResult<void> {
+      require_thread();
+      try validate(text);
+      try validate(key);
+      if (this.kind != 9) {
+        return SystemResult.Error(Error(1, "Widget is not a select"));
+      }
+      unsafe { sg_view_options(this.pointer, text.c_str(), key.c_str(), 0); };
+      return SystemResult.Ok;
+    }
+
+    /** Applies common properties after rejecting invalid dimensions and alignments. */
+    public method properties(enabled: bool, visible: bool, margin: i32, width: i32, height: i32, horizontal: i32, vertical: i32, expand_x: bool, expand_y: bool, spacing: i32) SystemResult<void> {
+      require_thread();
+      if (margin < 0 or width < -1 or height < -1 or horizontal < 0 or horizontal > 3 or vertical < 0 or vertical > 3 or spacing < 0) {
+        return SystemResult.Error(Error(1, "Invalid widget layout"));
+      }
+      unsafe { sg_view_properties(this.pointer, enabled ? 1 : 0, visible ? 1 : 0, margin, width, height, horizontal, vertical, expand_x ? 1 : 0, expand_y ? 1 : 0, spacing); };
+      return SystemResult.Ok;
+    }
+
+    /** Places a child first after validating parenting and grid coordinates. */
+    public method place_first(child: ref Widget, row: i32, column: i32, row_span: i32, column_span: i32) SystemResult<void> {
+      require_thread();
+      if (unsafe { sg_view_place(this.pointer, child.pointer, null, row, column, row_span, column_span); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid widget parenting"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Reorders or inserts a child after a sibling, preserving existing native focus. */
+    public method place_after(child: ref Widget, previous: ref Widget, row: i32, column: i32, row_span: i32, column_span: i32) SystemResult<void> {
+      require_thread();
+      if (unsafe { sg_view_place(this.pointer, child.pointer, previous.pointer, row, column, row_span, column_span); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid widget parenting"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Detaches this widget while retaining its independent reference. */
+    public method detach() void {
+      require_thread();
+      unsafe { sg_view_remove(this.pointer); };
+    }
+
+    /** Applies validated CSS through a widget-local provider owned by GTK. */
+    public method style(css: ref String) SystemResult<void> {
+      require_thread();
+      try validate(css);
+      if (unsafe { sg_view_style(this.pointer, css.c_str()); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid widget style"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Clears or appends a checked grid track without replacing its children. */
+    public method track(horizontal: bool, kind: i32, value: i32, clear: bool) SystemResult<void> {
+      require_thread();
+      if (unsafe { sg_view_track(this.pointer, horizontal ? 1 : 0, kind, value, clear ? 1 : 0); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid grid track"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Simulates a user edit through native GTK setters for acceptance tests. */
+    public method edit(text: ref String, value: i32) SystemResult<void> {
+      require_thread();
+      try validate(text);
+      if (this.kind < 7 or this.kind > 9 or value < -1) {
+        return SystemResult.Error(Error(1, "Widget is not editable"));
+      }
+      unsafe { sg_view_edit(this.pointer, text.c_str(), value); };
+      return SystemResult.Ok;
+    }
+
+    /** Reports the currently allocated width or height. */
+    public const method extent(horizontal: bool) i32 {
+      require_thread();
+      return unsafe { sg_view_extent(this.pointer, horizontal ? 1 : 0); };
+    }
+
+    /** Requests native keyboard focus. */
+    public method focus() void {
+      require_thread();
+      unsafe { raw.gtk_widget_grab_focus(this.pointer); };
+    }
+
+    /** Reports whether this widget owns native keyboard focus. */
+    public const method focused() bool {
+      require_thread();
+      return unsafe { raw.gtk_widget_is_focus(this.pointer); } != 0;
+    }
+
+    /** Emits a real clicked signal for automated interaction. */
+    public method click() void {
+      require_thread();
+      if (this.kind == 6) {
+        unsafe { sg_button_emit_clicked(this.pointer); };
+      }
+    }
+
+    /** Checks whether this is the first child of its parent. */
+    public const method first() bool {
+      require_thread();
+      return unsafe { gtk_widget_get_parent(this.pointer); } != null and unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == null;
+    }
+
+    /** Checks native adjacency without exposing handles. */
+    public const method follows(previous: const ref Widget) bool {
+      require_thread();
+      return unsafe { gtk_widget_get_parent(this.pointer); } == unsafe { gtk_widget_get_parent(previous.pointer); } and unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == previous.pointer;
+    }
+  }
+}

@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "ui.h"
+#include "view.h"
 #include <string.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -60,11 +61,13 @@ gboolean sg_window_is_open(GtkWindow *window) {
 }
 
 /** A queued delivery contains identifiers, never pointers into Sun storage. */
-typedef struct { guint64 id; guint kind; } PendingEvent;
+typedef struct { guint64 id; guint kind; char *text; int value; } PendingEvent;
 /** Native queue storage survives moves of its Sun owner. */
 struct SgEventLoop {
     GtkApplication *application;
     GQueue pending;
+    char *last_text;
+    int last_value;
     guint refs;
     guint64 identity;
     guint64 next_id;
@@ -79,20 +82,43 @@ struct SgEventSource {
     gulong handler;
     GSource *timer;
 };
+/** Frees a queued event and its owned text snapshot. */
+static void pending_free(gpointer data) {
+    PendingEvent *event = data;
+    g_free(event->text);
+    g_free(event);
+}
 static guint64 next_loop_identity = 1;
 static SgEventLoop *active_loop;
 
 /** Adds a delivery without calling user code from a native callback. */
 static void enqueue(SgEventSource *source) {
-    if (!source->loop->finished) {
+    if (!source->loop->finished && (!source->emitter || !g_object_get_data(source->emitter, "sun-applying"))) {
         PendingEvent *event = g_new(PendingEvent, 1);
-        *event = (PendingEvent){source->id, source->kind};
+        *event = (PendingEvent){.id = source->id, .kind = source->kind};
+        if (source->kind == 4) event->text = g_strdup(gtk_editable_get_text(GTK_EDITABLE(source->emitter)));
+        if (source->kind == 5) event->value = gtk_check_button_get_active(GTK_CHECK_BUTTON(source->emitter));
+        if (source->kind == 6) {
+            event->value = (int)gtk_drop_down_get_selected(GTK_DROP_DOWN(source->emitter));
+            GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(source->emitter));
+            if (item) event->text = g_strdup(g_object_get_data(item, "sun-option-key"));
+        }
         g_queue_push_tail(&source->loop->pending, event);
     }
 }
 /** Converts a clicked signal into a queued registration ID. */
 static void queued_click(GtkButton *button, gpointer data) {
     (void)button;
+    enqueue(data);
+}
+/** Captures editable state at signal time rather than at later dispatch. */
+static void queued_change(GObject *object, gpointer data) {
+    (void)object;
+    enqueue(data);
+}
+/** Captures dropdown selection from its notify signal. */
+static void queued_selection(GObject *object, GParamSpec *spec, gpointer data) {
+    (void)object; (void)spec;
     enqueue(data);
 }
 /** Observes removal even when retained references delay widget destruction. */
@@ -124,7 +150,8 @@ SgEventLoop *sg_loop_new(GtkApplication *application) {
 SgEventLoop *sg_loop_ref(SgEventLoop *loop) { loop->refs++; return loop; }
 void sg_loop_unref(SgEventLoop *loop) {
     if (--loop->refs == 0) {
-        g_queue_clear_full(&loop->pending, g_free);
+        g_queue_clear_full(&loop->pending, pending_free);
+        g_free(loop->last_text);
         g_object_unref(loop->application);
         g_free(loop);
     }
@@ -144,7 +171,7 @@ gboolean sg_loop_begin(SgEventLoop *loop) {
 void sg_loop_finish(SgEventLoop *loop) {
     loop->finished = TRUE;
     if (active_loop == loop) active_loop = NULL;
-    g_queue_clear_full(&loop->pending, g_free);
+    g_queue_clear_full(&loop->pending, pending_free);
 }
 gboolean sg_loop_has_windows(SgEventLoop *loop) {
     return gtk_application_get_windows(loop->application) != NULL;
@@ -155,11 +182,22 @@ guint64 sg_loop_pop(SgEventLoop *loop, gboolean closed_only) {
     while ((event = g_queue_pop_head(&loop->pending))) {
         guint64 id = event->id;
         guint kind = event->kind;
-        g_free(event);
-        if (!closed_only || kind == 2) return id;
+        if (!closed_only || kind == 2) {
+            g_free(loop->last_text);
+            loop->last_text = event->text;
+            loop->last_value = event->value;
+            g_free(event);
+            return id;
+        }
+        pending_free(event);
     }
     return 0;
 }
+const char *sg_loop_text(void *pointer) {
+    SgEventLoop *loop = pointer;
+    return loop->last_text ? loop->last_text : "";
+}
+int sg_loop_value(void *pointer) { return ((SgEventLoop *)pointer)->last_value; }
 void sg_loop_iterate(SgEventLoop *loop, gboolean block) {
     if (active_loop != loop) g_error("Event loop does not own dispatch");
     g_main_context_iteration(NULL, block);
@@ -176,6 +214,9 @@ SgEventSource *sg_loop_connect(SgEventLoop *loop, guint64 id, guint kind, gpoint
     source->kind = kind;
     source->emitter = g_object_ref(emitter);
     if (kind == 1) source->handler = g_signal_connect(emitter, "clicked", G_CALLBACK(queued_click), source);
+    else if (kind == 4) source->handler = g_signal_connect(emitter, "changed", G_CALLBACK(queued_change), source);
+    else if (kind == 5) source->handler = g_signal_connect(emitter, "toggled", G_CALLBACK(queued_change), source);
+    else if (kind == 6) source->handler = g_signal_connect(emitter, "notify::selected", G_CALLBACK(queued_selection), source);
     else source->handler = g_signal_connect(loop->application, "window-removed", G_CALLBACK(window_removed), source);
     return source;
 }
@@ -195,7 +236,7 @@ void sg_loop_rearm(SgEventSource *source, guint delay) {
 void sg_loop_source_free(SgEventSource *source) {
     if (source->timer) { g_source_destroy(source->timer); g_source_unref(source->timer); }
     if (source->handler) {
-        gpointer object = source->kind == 1 ? (gpointer)source->emitter : (gpointer)source->loop->application;
+        gpointer object = source->kind == 2 ? (gpointer)source->loop->application : (gpointer)source->emitter;
         g_signal_handler_disconnect(object, source->handler);
     }
     if (source->emitter) g_object_unref(source->emitter);

@@ -1,0 +1,13 @@
+using std;
+
+/** Verifies that the selected compiler provides the standard-library XML reader. */
+function main() i32 {
+  var a = make_heap_allocator();
+  var input = String("<probe/>");
+  var reader = XmlReader(a, input);
+  return match reader.next() {
+    XmlResult.Ok(_) => 0,
+    XmlResult.Error(_) => 1
+  };
+}
+manifest { libraries: ["stdlib.moon"] }

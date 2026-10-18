@@ -1,9 +1,12 @@
 using std;
+
 /** Provides one owned binding type within the shared module. */
 public module gtk {
+
   /** Owns a top-level window and destroys it before releasing its reference. */
   public class Window {
     var pointer: raw_ptr<u8> = null;
+
     /** Creates a window associated with a registered application. */
     init(application: ref Application) {
       require_thread();
@@ -86,6 +89,16 @@ public module gtk {
         return SystemResult.Error(Error(1, "Box already has a parent"));
       }
       unsafe { raw.gtk_window_set_child(this.pointer, child); };
+      return SystemResult.Ok;
+    }
+
+    /** Parents an independently owned heterogeneous widget to an open window. */
+    public method set_widget(widget: ref Widget) SystemResult<void> {
+      require_thread();
+      try this.check_open();
+      if (unsafe { sg_view_window(this.pointer, widget.pointer); } == 0) {
+        return SystemResult.Error(Error(1, "Widget already has a parent"));
+      }
       return SystemResult.Ok;
     }
 

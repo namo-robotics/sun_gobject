@@ -1,5 +1,6 @@
 using std;
 using sg;
+
 /** Parses generator options, validates selected declarations, and writes deterministic artifacts. */
 function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   var a = make_heap_allocator();
@@ -268,7 +269,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     contents.push(core);
     files.push(String("sun_gtk.sun"));
     var gtk_bundle = String("manifest { source_files: [\"gtk.sun\"");
-    var support_files = String("gtk/support.sun gtk/application.sun gtk/button.sun gtk/box.sun gtk/window.sun gtk/event_support.sun gtk/loop_core.sun gtk/id_seed.sun gtk/registration_id.sun gtk/queued_source.sun gtk/native_event.sun gtk/event_queue.sun gtk/handler.sun gtk/event_context.sun gtk/event_loop.sun gtk/drawing_support.sun gtk/label.sun gtk/drawing_area.sun gtk/save_dialog.sun svg/raw.sun svg/viewport.sun svg/document.sun");
+    var support_files = String("gtk/support.sun gtk/widget_support.sun gtk/widget.sun gtk/application.sun gtk/button.sun gtk/box.sun gtk/window.sun gtk/event_support.sun gtk/loop_core.sun gtk/id_seed.sun gtk/registration_id.sun gtk/queued_source.sun gtk/native_event.sun gtk/event_queue.sun gtk/handler.sun gtk/event_context.sun gtk/event_loop.sun gtk/drawing_support.sun gtk/label.sun gtk/drawing_area.sun gtk/save_dialog.sun svg/raw.sun svg/viewport.sun svg/document.sun");
     var support_paths = support_files.split_whitespace(a);
     for (var relative: ref String in support_paths) {
       var path = support.clone(a);

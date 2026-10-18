@@ -1,23 +1,28 @@
 using std;
 using sg;
-/** Parses the XML subset used by GIR into an owned indexed tree. */
+
+/** Adapts standard-library XML events to the indexed tree used by GIR. */
 public module xml {
+
   /** Owns one namespace-qualified attribute name and its decoded value. */
   public class Attribute {
     public var name: String;
     public var value: String;
+
     /** Initializes Attribute with the supplied owned values or native pointer contract. */
     init(name: String, value: String) {
       this.name = name;
       this.value = value;
     }
   }
+
   /** Stores one element, its decoded content, and its parent index. */
   public class Node {
     public var name: String;
     public var attributes: Vec<Attribute>;
     public var text: String;
     public var parent: i64;
+
     /** Initializes Node with the supplied owned values or native pointer contract. */
     init(name: String, parent: i64) {
       var a = make_heap_allocator();
@@ -38,431 +43,120 @@ public module xml {
       return String(a, "");
     }
   }
-  /** Owns XML input and its parsed tree, reporting malformed input with locations. */
+
+  /** Maps expanded names to the stable names consumed by GIR generation. */
+  function canonical(name: const ref XmlName) String {
+    var a = make_heap_allocator();
+    var uri = name.uri();
+    var result = String("");
+    if (uri.is_empty() or uri.equals_literal("http://www.gtk.org/introspection/core/1.0")) {
+      return name.local().clone(a);
+    }
+    if (uri.equals_literal("http://www.gtk.org/introspection/c/1.0")) {
+      result.append("c:");
+    } else if (uri.equals_literal("http://www.gtk.org/introspection/glib/1.0")) {
+      result.append("glib:");
+    } else if (uri.equals_literal("http://www.w3.org/XML/1998/namespace")) {
+      result.append("xml:");
+    } else {
+      result.append("{");
+      result.append(uri);
+      result.append("}");
+    }
+    result.append(name.local());
+    return result;
+  }
+
+  /** Copies a reader element into the generator's indexed representation. */
+  function node(element: const ref XmlElement, parent: i64) XmlResult<Node> {
+    var a = make_heap_allocator();
+    var result = Node(canonical(element.name()), parent);
+    for (var i: i64 = 0; i < element.namespace_count(); i += 1) {
+      var declaration = try element.namespace_at(i);
+      var name = String("xmlns");
+      if (not declaration.declared_prefix().is_empty()) {
+        name.append(":");
+        name.append(declaration.declared_prefix());
+      }
+      result.attributes.push(Attribute(name, declaration.namespace_uri().clone(a)));
+    }
+    for (var i: i64 = 0; i < element.attribute_count(); i += 1) {
+      var name = try element.attribute_name(i);
+      match element.attribute(name) {
+        Option.Some(value) => {
+          result.attributes.push(Attribute(canonical(name), value.clone(a)));
+        },
+        Option.None => {}
+      };
+    }
+    return XmlResult.Ok(result);
+  }
+
+  /** Owns input and the GIR tree; standard-library XML owns all parsing rules. */
   public class Document {
     public var nodes: Vec<Node>;
     var input: String;
     var filename: String;
-    var pos: i64 = 0;
-    /** Initializes Document with the supplied owned values or native pointer contract. */
+
+    /** Retains original input so diagnostics refer to the supplied file. */
     init(input: String, filename: String) {
       var a = make_heap_allocator();
       this.nodes = Vec<Node>(a, 64);
-      input.replace("\r\n", "\n");
-      input.replace("\r", "\n");
       this.input = input;
       this.filename = filename;
     }
 
-    /** Reports the current input location and stops parsing. */
-    method error(message: static_ptr<u8>) void {
-      var line: i64 = 1;
-      var column: i64 = 1;
-      for (var i: i64 = 0; i < this.pos; i += 1) {
-        if (byte(this.input, i) == 10) {
-          line += 1;
-          column = 1;
-        } else {
-          column += 1;
-        }
-      }
+    /** Converts owned reader events without retaining borrows into parser state. */
+    method read() XmlResult<void> {
       var a = make_heap_allocator();
-      var msg = this.filename.clone(a);
-      msg.append(":");
-      msg.append(line);
-      msg.append(":");
-      msg.append(column);
-      msg.append(": ");
-      msg.append(message);
-      fail(msg);
-    }
-
-    /** Reads the current input byte without advancing. */
-    method peek() u8 {
-      return byte(this.input, this.pos);
-    }
-
-    /** Checks a literal prefix at the current input position. */
-    method starts(s: static_ptr<u8>) bool {
-      if (this.pos + s.length() > this.input.length()) {
-        return false;
-      }
-      var part = slice(this.input, this.pos, s.length());
-      return part.equals_literal(s);
-    }
-
-    /** Consumes XML whitespace between tokens. */
-    method skip_space() void {
-      while (this.peek() == 32 or this.peek() == 9 or this.peek() == 10 or this.peek() == 13) {
-        this.pos += 1;
-      }
-    }
-
-    /** Consumes an expected delimiter or reports a syntax error. */
-    method expect(c: u8) void {
-      if (this.peek() != c) {
-        this.error("unexpected character");
-      }
-      this.pos += 1;
-    }
-
-    /** Copies the next qualified XML name. */
-    method name() String {
-      var start = this.pos;
-      var c = this.peek();
-      if (name_start(c) == false) {
-        this.error("expected XML name");
-      }
-      this.pos += 1;
-      while (name_start(this.peek()) or (this.peek() >= 48 and this.peek() <= 57) or this.peek() == 45 or this.peek() == 46) {
-        this.pos += 1;
-      }
-      return slice(this.input, start, this.pos - start);
-    }
-
-    /** Decodes one predefined or numeric character reference. */
-    method entity() String {
-      var a = make_heap_allocator();
-      this.expect(38);
-      var start = this.pos;
-      while (this.peek() != 59 and this.peek() != 0) {
-        this.pos += 1;
-      }
-      if (this.peek() == 0) {
-        this.error("unterminated entity");
-      }
-      var name = slice(this.input, start, this.pos - start);
-      this.pos += 1;
-      if (name.equals_literal("amp")) {
-        return String(a, "&");
-      }
-      if (name.equals_literal("lt")) {
-        return String(a, "<");
-      }
-      if (name.equals_literal("gt")) {
-        return String(a, ">");
-      }
-      if (name.equals_literal("quot")) {
-        return String(a, "\"");
-      }
-      if (name.equals_literal("apos")) {
-        return String(a, "'");
-      }
-      if (byte(name, 0) != 35) {
-        this.error("unknown entity (external entities are disabled)");
-      }
-      var base: i64 = 10;
-      var i: i64 = 1;
-      if (byte(name, 1) == 120) {
-        base = 16;
-        i = 2;
-      }
-      if (i == name.length()) {
-        this.error("empty numeric entity");
-      }
-      var code: i64 = 0;
-      while (i < name.length()) {
-        var c = byte(name, i);
-        var digit: i64 = -1;
-        if (c >= 48 and c <= 57) {
-          digit = _convert<i64>(c) - 48;
-        }
-        if (c >= 65 and c <= 70) {
-          digit = _convert<i64>(c) - 55;
-        }
-        if (c >= 97 and c <= 102) {
-          digit = _convert<i64>(c) - 87;
-        }
-        if (digit < 0 or digit >= base or code > 1114111) {
-          this.error("invalid numeric entity");
-        }
-        code = code * base + digit;
-        i += 1;
-      }
-      if (xml_char(code) == false) {
-        this.error("invalid XML character reference");
-      }
-      var result = String(a, "");
-      for (var j: i64 = 0; j < compute_utf8_len(code); j += 1) {
-        result.append_char(encode_utf8_byte(code, j));
-      }
-      return result;
-    }
-
-    /** Collects bytes until a delimiter, optionally decoding character references. */
-    method until(end: static_ptr<u8>, decode: bool) String {
-      var a = make_heap_allocator();
-      var result = String(a, "");
-      while (this.starts(end) == false) {
-        if (this.pos >= this.input.length()) {
-          this.error("unterminated XML construct");
-        }
-        if (decode and this.peek() == 38) {
-          var value = this.entity();
-          result.append(value);
-        } else {
-          result.append_char(this.peek());
-          this.pos += 1;
-        }
-      }
-      return result;
-    }
-
-    /** Resolves prefixes by their namespace URI, not by a conventional spelling. */
-    method qualified(name: const ref String, node: i64, attribute: bool) String {
-      var a = make_heap_allocator();
-      if (name.equals_literal("xmlns") or name.starts_with("xmlns:")) {
-        return name.clone(a);
-      }
-      var colon: i64 = -1;
-      for (var i: i64 = 0; i < name.length(); i += 1) {
-        if (byte(name, i) == 58) {
-          if (colon >= 0 or i == 0 or i == name.length() - 1) {
-            this.error("invalid qualified name");
-          }
-          colon = i;
-        }
-      }
-      if (colon < 0 and attribute) {
-        return name.clone(a);
-      }
-      var prefix = slice(name, 0, colon < 0 ? 0 : colon);
-      var local = slice(name, colon + 1, name.length() - colon - 1);
-      if (prefix.equals_literal("xml")) {
-        return name.clone(a);
-      }
-      var declaration = String("xmlns");
-      if (colon >= 0) {
-        declaration.append(":");
-        declaration.append(prefix);
-      }
-      var uri = String("");
-      var found = false;
-      var current = node;
-      while (current >= 0 and found == false) {
-        for (var i: i64 = 0; i < this.nodes[current].attributes.size(); i += 1) {
-          if (this.nodes[current].attributes[i].name.equals(declaration)) {
-            uri = this.nodes[current].attributes[i].value.clone(a);
-            found = true;
-            break;
-          }
-        }
-        current = this.nodes[current].parent;
-      }
-      if (colon >= 0 and (found == false or uri.length() == 0)) {
-        this.error("unbound namespace prefix");
-      }
-      if (uri.length() == 0 or uri.equals_literal("http://www.gtk.org/introspection/core/1.0")) {
-        return local;
-      }
-      var result = String("");
-      if (uri.equals_literal("http://www.gtk.org/introspection/c/1.0")) {
-        result.append("c:");
-      } else if (uri.equals_literal("http://www.gtk.org/introspection/glib/1.0")) {
-        result.append("glib:");
-      } else {
-        result.append("{");
-        result.append(uri);
-        result.append("}");
-      }
-      result.append(local);
-      return result;
-    }
-
-    /** Parses one XML document into an indexed tree, stopping at the first error. */
-    public method parse() void {
-      // Validate UTF-8 and XML 1.0 characters before tokenization.
-      var k: i64 = 0;
-      while (k < this.input.length()) {
-        var lead = byte(this.input, k);
-        var count: i64 = 1;
-        var code = _convert<i64>(lead);
-        var minimum: i64 = 0;
-        if (lead >= 128) {
-          if (lead >= 194 and lead <= 223) {
-            count = 2;
-            code = _convert<i64>(lead & 31);
-            minimum = 128;
-          } else if (lead >= 224 and lead <= 239) {
-            count = 3;
-            code = _convert<i64>(lead & 15);
-            minimum = 2048;
-          } else if (lead >= 240 and lead <= 244) {
-            count = 4;
-            code = _convert<i64>(lead & 7);
-            minimum = 65536;
-          } else {
-            this.pos = k;
-            this.error("invalid UTF-8");
-          }
-          for (var j: i64 = 1; j < count; j += 1) {
-            var c = byte(this.input, k + j);
-            if (c < 128 or c > 191) {
-              this.pos = k;
-              this.error("invalid UTF-8 continuation");
-            }
-            code = code * 64 + _convert<i64>(c & 63);
-          }
-        }
-        if (code < minimum or xml_char(code) == false) {
-          this.pos = k;
-          this.error("invalid XML character");
-        }
-        k += count;
-      }
-      if (this.starts("\xef\xbb\xbf")) {
-        this.pos = 3;
-      }
+      var reader = XmlReader(a, this.input);
       var current: i64 = -1;
-      var roots: i64 = 0;
-      while (this.pos < this.input.length()) {
-        if (this.starts("<!--")) {
-          this.pos += 4;
-          var comment = this.until("-->", false);
-          if (comment.contains("--")) {
-            this.error("invalid comment");
+      this.nodes.clear();
+      while (true) {
+        match try reader.next() {
+          Option.None => {
+            return XmlResult.Ok;
+          },
+          Option.Some(event) => {
+            match event {
+              XmlEvent.Start(element) => {
+                var item = try node(element, current);
+                current = this.nodes.size();
+                this.nodes.push(item);
+              },
+              XmlEvent.End(_) => {
+                current = this.nodes[current].parent;
+              },
+              XmlEvent.Text(text) => {
+                if (current >= 0) {
+                  this.nodes[current].text.append(text);
+                }
+              },
+              XmlEvent.Comment(_) => {},
+              XmlEvent.Instruction(_) => {}
+            };
           }
-          this.pos += 3;
-        } else if (this.starts("<?")) {
-          this.pos += 2;
-          var instruction = this.until("?>", false);
-          this.pos += 2;
-        } else if (this.starts("<![CDATA[")) {
-          if (current < 0) {
-            this.error("CDATA outside root");
-          }
-          this.pos += 9;
-          var text = this.until("]]>", false);
-          this.pos += 3;
-          this.nodes[current].text.append(text);
-        } else if (this.starts("<!")) {
-          this.error("DTD and declarations are disabled");
-        } else if (this.starts("</")) {
-          this.pos += 2;
-          var name = this.name();
-          this.skip_space();
-          this.expect(62);
-          if (current < 0) {
-            this.error("unexpected closing tag");
-          }
-          if (this.nodes[current].name.equals(name) == false) {
-            this.error("mismatched closing tag");
-          }
-          current = this.nodes[current].parent;
-        } else if (this.starts("<")) {
-          this.pos += 1;
-          var node = Node(this.name(), current);
-          if (current < 0) {
-            roots += 1;
-            if (roots > 1) {
-              this.error("multiple root elements");
-            }
-          }
-          while (true) {
-            var before = this.pos;
-            this.skip_space();
-            if (this.peek() == 47 or this.peek() == 62) {
-              break;
-            }
-            if (before == this.pos) {
-              this.error("attributes need whitespace");
-            }
-            var name = this.name();
-            this.skip_space();
-            this.expect(61);
-            this.skip_space();
-            var quote = this.peek();
-            if (quote != 34 and quote != 39) {
-              this.error("attribute must be quoted");
-            }
-            this.pos += 1;
-            var value = String("");
-            while (this.peek() != quote) {
-              if (this.peek() == 0 or this.peek() == 60) {
-                this.error("invalid attribute");
-              }
-              if (this.peek() == 38) {
-                var entity = this.entity();
-                value.append(entity);
-              } else {
-                var c = this.peek();
-                value.append_char((c == 9 or c == 10 or c == 13) ? 32 : c);
-                this.pos += 1;
-              }
-            }
-            this.pos += 1;
-            for (var n: i64 = 0; n < node.attributes.size(); n += 1) {
-              if (node.attributes[n].name.equals(name)) {
-                this.error("duplicate attribute");
-              }
-            }
-            node.attributes.push(Attribute(name, value));
-          }
-          var closed = this.peek() == 47;
-          if (closed) {
-            this.pos += 1;
-          }
-          this.expect(62);
-          var index = this.nodes.size();
-          this.nodes.push(node);
-          if (closed == false) {
-            current = index;
-          }
-        } else {
-          var start = this.pos;
-          var text = String("");
-          while (this.pos < this.input.length() and this.peek() != 60) {
-            if (this.starts("]]>")) {
-              this.error("CDATA terminator in text");
-            }
-            if (this.peek() == 38) {
-              var entity = this.entity();
-              text.append(entity);
-            } else {
-              text.append_char(this.peek());
-              this.pos += 1;
-            }
-          }
-          if (current >= 0) {
-            this.nodes[current].text.append(text);
-          } else {
-            text.trim();
-            if (text.length() != 0) {
-              this.pos = start;
-              this.error("text outside root");
-            }
-          }
-        }
+        };
       }
-      if (current != -1 or roots != 1) {
-        this.error("incomplete XML document");
-      }
-      // Resolve before modifying attributes, because declarations remain in scope.
-      var a = make_heap_allocator();
-      for (var n: i64 = 0; n < this.nodes.size(); n += 1) {
-        var raw_name = this.nodes[n].name.clone(a);
-        var expanded = this.qualified(raw_name, n, false);
-        this.nodes[n].name = expanded;
-        for (var i: i64 = 0; i < this.nodes[n].attributes.size(); i += 1) {
-          raw_name = this.nodes[n].attributes[i].name.clone(a);
-          expanded = this.qualified(raw_name, n, true);
-          for (var j: i64 = 0; j < i; j += 1) {
-            if (this.nodes[n].attributes[j].name.equals(expanded)) {
-              this.error("duplicate expanded attribute");
-            }
-          }
-          this.nodes[n].attributes[i].name = expanded;
-        }
-      }
+      return XmlResult.Ok;
     }
-  }
-  /** Recognizes the byte-level XML name characters supported by this reader. */
-  function name_start(c: u8) bool {
-    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95 or c == 58 or c >= 128;
-  }
 
-  /** Checks whether a scalar is legal in XML character data. */
-  function xml_char(c: i64) bool {
-    return c == 9 or c == 10 or c == 13 or (c >= 32 and c <= 55295) or (c >= 57344 and c <= 65533) or (c >= 65536 and c <= 1114111);
+    /** Stops generation on malformed XML, preserving filename and source location. */
+    public method parse() void {
+      match this.read() {
+        XmlResult.Ok => {},
+        XmlResult.Error(error) => {
+          var a = make_heap_allocator();
+          var message = this.filename.clone(a);
+          message.append(":");
+          message.append(error.line());
+          message.append(":");
+          message.append(error.column());
+          message.append(": ");
+          message.append(error.message());
+          fail(message);
+        }
+      };
+    }
   }
 }
