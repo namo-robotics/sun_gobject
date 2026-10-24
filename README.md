@@ -219,3 +219,16 @@ returns an error. `cancel()` is idempotent; destruction also closes the dialog a
 releases its retained parent. Text validation, closed parents, and duplicate
 requests are checked before calling GTK. Applications remain responsible for
 writing files and presenting success or error messages.
+
+The checked `gtk.OpenDialog` and `gtk.SaveDialog` bindings own native file
+choosers and expose selected local paths through polling. Both reject concurrent
+requests and closed parents, and release pending requests on cancellation or
+destruction. UI adapters can use these bindings without exposing native handles
+to application state.
+
+The declarative `gtk.Widget` media kind combines `GtkVideo` playback with an owned
+timeline and draggable selection handles. Its checked methods validate ranges in
+microseconds and expose copied range edits through `EventQueue`. Playback, seeking,
+keyboard input, and frame drawing remain on the GTK thread. Unmapping pauses the
+stream; destruction disconnects callbacks and releases it. GTK's GStreamer media
+backend requires suitable codec packages, supplied by the development image.

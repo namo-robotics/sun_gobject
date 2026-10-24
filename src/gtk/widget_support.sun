@@ -43,3 +43,25 @@ public module gtk {
   /** Reads an allocated native dimension. */
   extern "C" function sg_view_extent(widget: raw_ptr<u8>, horizontal: i32) i32;
 }
+
+/** Declares the owned media widget bridge used by checked widget operations. */
+public module gtk {
+
+  /** Applies a validated local source and microsecond selection without emitting edits. */
+  extern "C" function sg_media_set(widget: raw_ptr<u8>, path: raw_ptr<u8>, duration: i64, start: i64, end: i64, position: i64) void;
+
+  /** Borrows the private native edit emitter retained by the event subscription. */
+  extern "C" function sg_media_events(widget: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Exercises real gesture callbacks with normalized timeline positions. */
+  extern "C" function sg_media_drag(widget: raw_ptr<u8>, start: f64, end: f64) void;
+
+  /** Reports media preparation, failure, or playback state. */
+  extern "C" function sg_media_status(widget: raw_ptr<u8>) i32;
+
+  /** Toggles playback through the native transport control. */
+  extern "C" function sg_media_toggle(widget: raw_ptr<u8>) void;
+
+  /** Reports the actual decoded playback timestamp. */
+  extern "C" function sg_media_timestamp(widget: raw_ptr<u8>) i64;
+}

@@ -45,6 +45,9 @@ public module gtk {
   /** Releases native string storage. */
   extern "C" function g_free(memory: raw_ptr<u8>) void;
 
+  /** Keeps a chooser above its parent and blocks conflicting parent interactions. */
+  extern "C" function gtk_native_dialog_set_modal(dialog: raw_ptr<u8>, modal: i32) void;
+
   /** Presents a native dialog. */
   extern "C" function gtk_native_dialog_show(dialog: raw_ptr<u8>) void;
 

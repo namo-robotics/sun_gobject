@@ -1,4 +1,5 @@
 #include "view.h"
+#include "media.h"
 #include "ui.h"
 #include <string.h>
 
@@ -138,6 +139,7 @@ GtkWidget *sg_view_new(int kind) {
     case 7: widget = gtk_entry_new(); break;
     case 8: widget = gtk_check_button_new(); break;
     case 9: widget = gtk_drop_down_new(NULL, NULL); break;
+    case 10: widget = sg_media_new(); break;
     default: return NULL;
     }
     return g_object_ref_sink(widget);
@@ -238,6 +240,7 @@ static void style_error(GtkCssProvider *provider, GtkCssSection *section, const 
 typedef struct {
     GdkDisplay *display;
     GtkCssProvider *provider;
+    char *source;
 } WidgetStyle;
 
 /** Removes a widget-specific provider before releasing its display reference. */
@@ -246,9 +249,12 @@ static void widget_style_free(gpointer data) {
     gtk_style_context_remove_provider_for_display(style->display, GTK_STYLE_PROVIDER(style->provider));
     g_object_unref(style->provider);
     g_object_unref(style->display);
+    g_free(style->source);
     g_free(style);
 }
 gboolean sg_view_style(GtkWidget *widget, const char *css) {
+    WidgetStyle *current = g_object_get_data(G_OBJECT(widget), "sun-style");
+    if (current && !strcmp(current->source, css)) return TRUE;
     GtkCssProvider *provider = gtk_css_provider_new();
     char *name = g_strdup_printf("sun-node-%p", (void *)widget);
     char *selector = g_strconcat(".", name, NULL);
@@ -265,6 +271,7 @@ gboolean sg_view_style(GtkWidget *widget, const char *css) {
     WidgetStyle *style = g_new(WidgetStyle, 1);
     style->display = g_object_ref(gtk_widget_get_display(widget));
     style->provider = provider;
+    style->source = g_strdup(css);
     gtk_style_context_add_provider_for_display(style->display, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_set_data_full(G_OBJECT(widget), "sun-style", style, widget_style_free);
     return TRUE;

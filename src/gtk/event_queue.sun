@@ -44,6 +44,9 @@ public module gtk {
     /** Subscribes to a supported widget's activation or edit signal. */
     public method on_widget(widget: ref Widget) SystemResult<RegistrationId> {
       require_thread();
+      if (widget.kind == 10) {
+        return this.connect(4, unsafe { sg_media_events(widget.pointer); });
+      }
       var kind: u32 = widget.kind == 6 ? 1 : (widget.kind == 7 ? 4 : (widget.kind == 8 ? 5 : (widget.kind == 9 ? 6 : 0)));
       if (kind == 0) {
         return SystemResult.Error(Error(1, "Widget has no edit signal"));

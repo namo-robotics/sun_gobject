@@ -1,0 +1,94 @@
+using std;
+
+/** Provides a polled native file-open chooser with explicit ownership. */
+public module gtk {
+
+  /** Owns a reusable native open dialog; responses are polled and never run application handlers. */
+  public class OpenDialog {
+    var pointer: raw_ptr<u8> = null;
+    var parent: raw_ptr<u8> = null;
+
+    /** Creates an idle dialog wrapper on the main thread. */
+    init() {
+      require_thread();
+    }
+
+    /** Closes any active chooser and releases its retained parent. */
+    deinit() {
+      this.cancel();
+    }
+
+    /** Presents one open request; invalid text, a closed parent, or an active request returns an error. */
+    public method show(parent: ref Window, title: ref String) SystemResult<void> {
+      require_thread();
+      try validate(title);
+      if (this.pointer != null) {
+        return SystemResult.Error(Error(1, "Open dialog is already open"));
+      }
+      if (parent.is_open() == false) {
+        return SystemResult.Error(Error(1, "Open dialog parent is closed"));
+      }
+      unsafe {
+        this.parent = parent.raw_handle();
+        gobject.raw.g_object_ref(this.parent);
+        this.pointer = gtk_file_chooser_native_new(title.c_str(), this.parent, 0, "Open", "Cancel");
+        connect_save_response(this.pointer, "response", save_response, null, null, 0);
+        gtk_native_dialog_set_modal(this.pointer, 1);
+        gtk_native_dialog_show(this.pointer);
+      };
+      return SystemResult.Ok;
+    }
+
+    /** Reports whether a request is pending or awaiting consumption. */
+    public const method is_open() bool {
+      require_thread();
+      return this.pointer != null;
+    }
+
+    /** Returns a selected local path once; pending and cancelled requests return None. */
+    public method take_path() SystemResult<Option<String>> {
+      require_thread();
+      if (this.pointer == null) {
+        return SystemResult.Ok(Option.None);
+      }
+      if (unsafe { sg_window_is_open(this.parent); } == 0) {
+        this.cancel();
+        return SystemResult.Ok(Option.None);
+      }
+      if (unsafe { g_object_get_data(this.pointer, "sun-gtk-save-done"); } == null) {
+        return SystemResult.Ok(Option.None);
+      }
+      if (unsafe { g_object_get_data(this.pointer, "sun-gtk-save-accepted"); } == null) {
+        this.cancel();
+        return SystemResult.Ok(Option.None);
+      }
+      var file = unsafe { gtk_file_chooser_get_file(this.pointer); };
+      var native_path: raw_ptr<u8> = null;
+      if (file != null) {
+        native_path = unsafe { g_file_get_path(file); };
+        unsafe { gobject.raw.g_object_unref(file); };
+      }
+      this.cancel();
+      if (native_path == null) {
+        return SystemResult.Error(Error(1, "Input must be a local file"));
+      }
+      var a = make_heap_allocator();
+      var path = from_c_str(a, native_path);
+      unsafe { g_free(native_path); };
+      return SystemResult.Ok(Option.Some(path));
+    }
+
+    /** Cancels an active request and releases all native resources; repeated calls are harmless. */
+    public method cancel() void {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gtk_native_dialog_destroy(this.pointer); gobject.raw.g_object_unref(this.pointer); };
+        this.pointer = null;
+      }
+      if (this.parent != null) {
+        unsafe { gobject.raw.g_object_unref(this.parent); };
+        this.parent = null;
+      }
+    }
+  }
+}

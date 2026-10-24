@@ -35,6 +35,7 @@ public module gtk {
         this.pointer = gtk_file_chooser_native_new(title.c_str(), this.parent, 1, "Save", "Cancel");
         gtk_file_chooser_set_current_name(this.pointer, filename.c_str());
         connect_save_response(this.pointer, "response", save_response, null, null, 0);
+        gtk_native_dialog_set_modal(this.pointer, 1);
         gtk_native_dialog_show(this.pointer);
       };
       return SystemResult.Ok;

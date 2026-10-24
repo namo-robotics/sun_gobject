@@ -24,6 +24,7 @@ manifest {
     "gtk/label.sun",
     "gtk/drawing_area.sun",
     "gtk/save_dialog.sun",
+    "gtk/open_dialog.sun",
     "svg/raw.sun",
     "svg/viewport.sun",
     "svg/document.sun"

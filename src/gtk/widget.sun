@@ -11,7 +11,7 @@ public module gtk {
     /** Creates a supported widget on the GTK main thread. */
     init(kind: i32) SystemResult<void> {
       require_thread();
-      if (kind < 0 or kind > 9) {
+      if (kind < 0 or kind > 10) {
         return SystemResult.Error(Error(1, "Unknown widget kind"));
       }
       if (unsafe { gtk_init_check(); } == 0) {
@@ -26,6 +26,47 @@ public module gtk {
       require_thread();
       if (this.pointer != null) {
         unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Applies a media source and trim range in microseconds, rejecting invalid bounds. */
+    public method media(path: ref String, duration: i64, start: i64, end: i64, position: i64) SystemResult<void> {
+      require_thread();
+      try validate(path);
+      if (this.kind != 10 or duration < 0 or duration > 1000000000000000 or start < 0 or end < start or end > duration or position < 0 or position > duration or (duration > 0 and start == end)) {
+        return SystemResult.Error(Error(1, "Invalid media range"));
+      }
+      unsafe { sg_media_set(this.pointer, path.c_str(), duration, start, end, position); };
+      return SystemResult.Ok;
+    }
+
+    /** Drives a real native drag for automated interaction, rejecting nonfinite coordinates. */
+    public method drag_media(start: f64, end: f64) SystemResult<void> {
+      require_thread();
+      if (this.kind != 10 or start != start or end != end or start < 0.0 or start > 1.0 or end < 0.0 or end > 1.0) {
+        return SystemResult.Error(Error(1, "Invalid media drag"));
+      }
+      unsafe { sg_media_drag(this.pointer, start, end); };
+      return SystemResult.Ok;
+    }
+
+    /** Reports preview availability without exposing media-stream ownership. */
+    public const method media_status() i32 {
+      require_thread();
+      return this.kind == 10 ? unsafe { sg_media_status(this.pointer); } : -1;
+    }
+
+    /** Reads the decoded timestamp for native playback verification. */
+    public const method media_timestamp() i64 {
+      require_thread();
+      return this.kind == 10 ? unsafe { sg_media_timestamp(this.pointer); } : 0;
+    }
+
+    /** Toggles playback through the same handler as the native transport button. */
+    public method toggle_media() void {
+      require_thread();
+      if (this.kind == 10) {
+        unsafe { sg_media_toggle(this.pointer); };
       }
     }
 

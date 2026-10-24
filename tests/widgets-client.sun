@@ -163,7 +163,32 @@ function run() SystemResult<void> {
     },
     Option.None => {}
   };
+  var open = gtk.OpenDialog();
+  try open.show(window, title);
+  match open.show(window, title) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Concurrent open request was accepted"));
+    },
+    SystemResult.Error(_) => {}
+  };
+  open.cancel();
+  open.cancel();
+  if (open.is_open()) {
+    return SystemResult.Error(Error(1, "Cancelled open chooser remained open"));
+  }
+  match try open.take_path() {
+    Option.Some(_) => {
+      return SystemResult.Error(Error(1, "Cancelled open chooser returned a path"));
+    },
+    Option.None => {}
+  };
   window.close();
+  match open.show(window, title) {
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Closed parent accepted an open request"));
+    },
+    SystemResult.Error(_) => {}
+  };
   match chooser.show(window, title, filename) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Closed parent accepted a save request"));
