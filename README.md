@@ -30,6 +30,16 @@ Use `./scripts/bootstrap-sun.sh --update` to update the mutable dev release, or
 `SUN_EXECUTABLE=/absolute/path/to/sun ./build.sh` to select an installation with a
 matching standard library.
 
+The current baseline is Sun `0.dev (fc9a5b23cc63)`. Recreating the devcontainer
+updates the rolling development package; rebuild all bundles together after a
+compiler update.
+
+The bundle manifests declare stable library IDs: `namo-robotics/sun_gobject` and
+`namo-robotics/sun_gtk`.
+Keep these IDs unchanged when moving source files or renaming output bundles.
+They identify the libraries independently of build paths; they do not guarantee
+ABI compatibility across compiler or library changes.
+
 For incremental development:
 
 ```sh

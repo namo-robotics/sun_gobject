@@ -14,7 +14,7 @@
     "CTEST_PARALLEL_LEVEL": "4",
     "CCACHE_MAXSIZE": "10G"
   },
-  "postCreateCommand": "sudo chown ubuntu:ubuntu /home/ubuntu/.cache/ccache && ./scripts/bootstrap-sun.sh",
+  "postCreateCommand": "sudo chown ubuntu:ubuntu /home/ubuntu/.cache/ccache && ./scripts/bootstrap-sun.sh --update",
   "customizations": {
     "vscode": {
       "extensions": [
