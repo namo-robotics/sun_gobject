@@ -31,7 +31,8 @@ read -r -a gtk_flags <<< "$(pkg-config --libs gtk4 librsvg-2.0)"
 build/sun-gobject-tests_test --test-filter runtime_tests --test-sequential
 "$compiler" --dynamic --lib-path build -Lbuild/native -lsun_gobject_native "${gtk_flags[@]}" -c -o build/gtk-demo examples/gtk-demo.sun
 "$compiler" --dynamic --lib-path build -Lbuild/native -lsun_gobject_native "${gtk_flags[@]}" -c -o build/widgets-client tests/widgets-client.sun
-export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo
+# Cocoa may warn about skipped presentation frames; keep critical API failures fatal.
+export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo
  gtimeout 30s build/gtk-demo --self-test
  gtimeout 30s build/widgets-client
 mkdir -p build/macos/lib/sun build/macos/lib build/macos/share/sun_gobject
