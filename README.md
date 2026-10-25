@@ -5,7 +5,7 @@ explicit ownership helpers, and a small safe GTK API. The GTK layer provides
 applications, windows, buttons, box containers, native event queues, and timers
 without requiring `unsafe` blocks in application code.
 
-Support currently targets **native x86_64 Linux GNU** and a curated subset of the
+Support currently targets **native x86_64 Linux GNU and Apple Silicon macOS** and a curated subset of the
 upstream APIs. General widget casts, arbitrary signals, captured closures,
 custom subclasses, libadwaita, and cross-compilation are outside the current scope.
 
@@ -162,7 +162,7 @@ flowchart TD
 | [`src/support.sun`](src/support.sun) | Provide low-level reference ownership, property helpers, and signal connections. |
 | [`src/gtk/`](src/gtk/) | Provide checked widgets, drawing surfaces, save dialogs, and native events, with at most one class per file. Shared declarations and helpers live in support files. |
 | [`src/svg/`](src/svg/) | Own parsed librsvg documents and expose an explicit unsafe native render boundary, with separate document and viewport classes. |
-| [`native/`](native/) | Implement C signal adapters, event storage, UTF-8 validation, and the Linux main-thread guard. |
+| [`native/`](native/) | Implement C signal adapters, event storage, UTF-8 validation, and the platform main-thread guard. |
 | [`tools/build.sun`](tools/build.sun) | Orchestrate generation, Sun compilation, tests, and installation. |
 | [`tests/`](tests/) | Test the generator, runtime helpers, event loop, GTK demo, and an isolated installed consumer. |
 
@@ -181,7 +181,7 @@ safe wrappers. Low-level callers remain responsible for pointer validity, proper
 types, and transferred references.
 
 The safe GTK layer owns native references, validates text and parenting, rejects
-operations on closed windows, and enforces the initial Linux thread at runtime.
+operations on closed windows, and enforces the platform main thread at runtime.
 Native adapters queue events for Sun callbacks instead of storing Sun stack
 pointers in GTK. The optional callback loop adds named handlers, deferred commands,
 and automatic exit after its last window closes. It is single-use and cleans up

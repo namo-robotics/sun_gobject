@@ -2,7 +2,7 @@
 #include <stddef.h>
 /* Sun cannot express GValue's union. The support layer reserves two ABI slots;
  * these assertions are checked against the exact headers we link against. */
-_Static_assert(sizeof(void *) == 8, "only x86_64 is supported");
+_Static_assert(sizeof(void *) == 8, "a 64-bit target is required");
 _Static_assert(sizeof(GValue) == 24, "GValue size changed");
 _Static_assert(_Alignof(GValue) == 8, "GValue alignment changed");
 _Static_assert(offsetof(GValue, g_type) == 0, "GValue type offset changed");

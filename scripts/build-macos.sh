@@ -33,6 +33,9 @@ build/sun-gobject-tests_test --test-filter runtime_tests --test-sequential
 "$compiler" --dynamic --lib-path build -Lbuild/native -lsun_gobject_native "${gtk_flags[@]}" -c -o build/widgets-client tests/widgets-client.sun
 # Cocoa may warn about skipped presentation frames; keep critical API failures fatal.
 export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo
+# Native file panels synthesize a click when becoming key. Keep the unattended
+# runner's pointer away from the menu bar so that click cannot start menu tracking.
+swift -e 'import CoreGraphics; let bounds = CGDisplayBounds(CGMainDisplayID()); CGWarpMouseCursorPosition(CGPoint(x: bounds.midX, y: bounds.midY))'
 gtimeout 30s build/gtk-demo --self-test
 # Capture a native stack before the timeout terminates a stalled widget test.
 build/widgets-client &

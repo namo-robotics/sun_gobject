@@ -10,8 +10,11 @@ jobs:
       - name: Build development image with Sun dev Debian package
         run: docker build -t sun-gobject-dev .
       - name: Build and test
+        # D-Bus requires a passwd entry for the runner UID inside the container.
         run: >-
           docker run --rm --user "$(id -u):$(id -g)"
+          -v /etc/passwd:/etc/passwd:ro
+          -v /etc/group:/etc/group:ro
           -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev
           bash -c './build.sh && sun fmt --check src tools examples tests/main.sun tests/runtime.sun tests/support.sun tests/generator.sun tests/integration.sun tests/events.sun tests/event-client.sun'
       - name: Upload generation evidence and test results
