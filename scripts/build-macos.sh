@@ -33,8 +33,19 @@ build/sun-gobject-tests_test --test-filter runtime_tests --test-sequential
 "$compiler" --dynamic --lib-path build -Lbuild/native -lsun_gobject_native "${gtk_flags[@]}" -c -o build/widgets-client tests/widgets-client.sun
 # Cocoa may warn about skipped presentation frames; keep critical API failures fatal.
 export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo
- gtimeout 30s build/gtk-demo --self-test
- gtimeout 30s build/widgets-client
+gtimeout 30s build/gtk-demo --self-test
+# Capture a native stack before the timeout terminates a stalled widget test.
+build/widgets-client &
+widget_pid=$!
+( sleep 20; sample "$widget_pid" 1 -file build/widgets-sample.txt >/dev/null 2>&1 || true; kill -TERM "$widget_pid" 2>/dev/null || true ) &
+watchdog_pid=$!
+widget_status=0
+wait "$widget_pid" || widget_status=$?
+kill "$watchdog_pid" 2>/dev/null || true
+if [[ $widget_status != 0 ]]; then
+  cat build/widgets-sample.txt 2>/dev/null || true
+  exit "$widget_status"
+fi
 mkdir -p build/macos/lib/sun build/macos/lib build/macos/share/sun_gobject
 cp build/sun_gobject.moon build/sun_gtk.moon build/macos/lib/sun/
 cp build/native/libsun_gobject_native.a build/macos/lib/
