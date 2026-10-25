@@ -107,7 +107,7 @@ module build_tasks {
   }
 
   /** Records compiler and source provenance and generates test path constants. */
-  function prepare() SystemResult<String> {
+  public function prepare() SystemResult<String> {
     var a = make_heap_allocator();
     var mkdir = std.process.Command(a, "mkdir");
     mkdir.add_arg("-p");
@@ -304,6 +304,11 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   var result: SystemResult<void> = SystemResult.Ok;
   if (args.size() == 1 or (args.size() == 2 and args[1].equals_literal("build"))) {
     result = build_tasks.build();
+  } else if (args.size() == 2 and args[1].equals_literal("prepare")) {
+    result = match build_tasks.prepare() {
+      SystemResult.Ok(_) => SystemResult.Ok,
+      SystemResult.Error(error) => SystemResult.Error(error)
+    };
   } else if (args.size() == 3 and args[1].equals_literal("install")) {
     result = build_tasks.install(args[2]);
   } else if (args.size() == 2 and args[1].equals_literal("test")) {
@@ -319,7 +324,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
       }
     };
   } else {
-    eprintln("Usage: sun tools/build.sun -- [build|test|install PREFIX]");
+    eprintln("Usage: sun tools/build.sun -- [prepare|build|test|install PREFIX]");
     return 1;
   }
   return match result {
