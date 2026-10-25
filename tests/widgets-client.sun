@@ -142,10 +142,12 @@ function run() SystemResult<void> {
   if (area.rendered() == false or area.render_failed()) {
     return SystemResult.Error(Error(1, "Retained document did not render"));
   }
+  eprintln("Drawing rendered; checking save dialog");
   var chooser = gtk.SaveDialog();
   var title = String("Save test");
   var filename = String("test.svg");
   try chooser.show(window, title, filename);
+  eprintln("Save dialog shown; checking cancellation");
   match chooser.show(window, title, filename) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent save request was accepted"));
@@ -163,8 +165,10 @@ function run() SystemResult<void> {
     },
     Option.None => {}
   };
+  eprintln("Save dialog cancelled; checking open dialog");
   var open = gtk.OpenDialog();
   try open.show(window, title);
+  eprintln("Open dialog shown; checking cancellation");
   match open.show(window, title) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent open request was accepted"));
@@ -195,6 +199,7 @@ function run() SystemResult<void> {
     },
     SystemResult.Error(_) => {}
   };
+  eprintln("Dialogs closed; checking declarative widgets");
   try declarative_widgets(app);
   println("Checked drawing widgets passed");
   return SystemResult.Ok;
