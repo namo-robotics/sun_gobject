@@ -2,11 +2,19 @@
 #include "ui.h"
 #include "view.h"
 #include <string.h>
+#ifdef __APPLE__
+#include <pthread.h>
+#else
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 
 void sg_ui_require_main_thread(void) {
+#ifdef __APPLE__
+    if (!pthread_main_np()) {
+#else
     if (syscall(SYS_gettid) != getpid()) {
+#endif
         g_error("Sun GTK objects must be used and destroyed on the main thread");
     }
 }
