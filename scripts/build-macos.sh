@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || { echo 'Requires Apple Silicon macOS' >&2; exit 1; }
 export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 export PATH="$(brew --prefix coreutils)/libexec/gnubin:$PATH"
-export PKG_CONFIG_PATH="$(brew --prefix libffi)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:$(brew --prefix libffi)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig"
 compiler=${SUN_EXECUTABLE:-sun}
 mkdir -p build/generated src/generated tmp
 "$compiler" --version > build/sun-version.txt 2>&1
@@ -14,7 +14,7 @@ cmake --build build/native --parallel 2
 "$compiler" --dynamic -L"$(brew --prefix)/lib" -lglib-2.0 -c -o build/sun-gir src/generator/main.sun
 build/sun-gir --selection bindings/selection.xml --overrides bindings/overrides.xml \
   --output-dir build/generated --source-dir src/generated --target arm64-apple-darwin \
-  --gir-dir "$(brew --prefix)/share/gir-1.0" \
+  --gir-dir "${SUN_GTK_PREFIX:-$(brew --prefix gtk4)}/share/gir-1.0" \
   --gir-dir "$(brew --prefix glib)/share/gir-1.0" \
   --gir-dir "$(brew --prefix gtk4)/share/gir-1.0"
 "$compiler" --dynamic --emit-moon -o build/sun_gobject.moon src/sun_gobject.sun
