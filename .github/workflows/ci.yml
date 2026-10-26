@@ -31,3 +31,29 @@ jobs:
             build/generated/provenance.json
             build/generated/coverage.tsv
             build/test-results.log
+      - name: Package tested Linux development bundles
+        run: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev sun tools/package.sun
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sun-gobject-linux-release
+          if-no-files-found: error
+          path: build/sun-gobject_0.dev_amd64.deb
+  publish:
+    needs: linux
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sun-gobject-linux-release
+          path: build/release
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev
+          target_commitish: ${{ github.sha }}
+          name: Development Build
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: build/release/*.deb

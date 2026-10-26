@@ -9,6 +9,19 @@ Support currently targets **native x86_64 Linux GNU and Apple Silicon macOS** an
 upstream APIs. General widget casts, arbitrary signals, captured closures,
 custom subclasses, libadwaita, and cross-compilation are outside the current scope.
 
+## Published development packages
+
+Linux CI publishes `sun-gobject_0.dev_amd64.deb` to the `dev` release after tests
+pass on `main`. The Ubuntu 26.04 package contains `sun_gobject.moon` and
+`sun_gtk.moon` under `/usr/lib/sun`, the native static archive under
+`/usr/lib/sun/native`, and license/compiler records under
+`/usr/share/doc/sun-gobject`. Consumers can install or extract this package
+without building the bindings from source. Use the compiler recorded in
+`sun-version.txt` and matching UI bundles.
+
+To package existing tested Linux build outputs, run `./scripts/package-linux.sh`.
+The Apple Silicon release remains available as a separate macOS archive.
+
 ## Setup
 
 Open the repository in its devcontainer and run all commands from the workspace

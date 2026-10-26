@@ -1,0 +1,73 @@
+using std;
+
+/** Packages already-built Linux development artifacts for downstream applications. */
+module release_package {
+
+  /** Runs a packaging utility and propagates its exit status. */
+  function run(command: ref std.process.Command) SystemResult<void> {
+    var status = try command.status();
+    if (status != 0) {
+      return SystemResult.Error(Error(status, "Release packaging failed"));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Copies a required artifact with its installation permissions. */
+  function install(source: String, destination: String, executable: bool) SystemResult<void> {
+    var command = std.process.Command(make_heap_allocator(), "install");
+    command.add_arg("-D");
+    command.add_arg("-m");
+    command.add_arg(executable ? "755" : "644");
+    command.add_arg(source);
+    command.add_arg(destination);
+    return run(command);
+  }
+
+  /** Creates a Debian package without rebuilding or fetching any dependency. */
+  public function package() SystemResult<void> {
+    var a = make_heap_allocator();
+    var arch = std.process.Command(a, "dpkg");
+    arch.add_arg("--print-architecture");
+    var result = try arch.output();
+    var architecture = result.stdout().clone(a);
+    architecture.trim();
+    if (result.status() != 0 or not architecture.equals_literal("amd64")) {
+      return SystemResult.Error(Error(1, "Linux release packages require amd64"));
+    }
+    var root = String("build/release-package/root");
+    var clear = std.process.Command(a, "rm");
+    clear.add_arg("-rf");
+    clear.add_arg(root);
+    try run(clear);
+    try install(String("build/sun_gobject.moon"), `${root}/usr/lib/sun/sun_gobject.moon`, false);
+    try install(String("build/sun_gtk.moon"), `${root}/usr/lib/sun/sun_gtk.moon`, false);
+    try install(String("build/native/libsun_gobject_native.a"), `${root}/usr/lib/sun/native/libsun_gobject_native.a`, false);
+    try install(String("LICENSE"), `${root}/usr/share/doc/sun-gobject/copyright`, false);
+    try install(String("build/sun-version.txt"), `${root}/usr/share/doc/sun-gobject/sun-version.txt`, false);
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg(`${root}/DEBIAN`);
+    try run(mkdir);
+    var control = String("Package: sun-gobject\nVersion: 0.dev\nArchitecture: amd64\nMaintainer: David Brown <davidwbrwn@gmail.com>\nDepends: sun, libgtk-4-dev, librsvg2-dev\nSection: libdevel\nPriority: optional\nDescription: Sun development bundles and tools\n Built for Ubuntu 26.04 with the recorded Sun compiler.\n");
+    var path = `${root}/DEBIAN/control`;
+    try std.io.write_string(path, control);
+    var archive = std.process.Command(a, "dpkg-deb");
+    archive.add_arg("--root-owner-group");
+    archive.add_arg("--build");
+    archive.add_arg(root);
+    archive.add_arg("build/sun-gobject_0.dev_amd64.deb");
+    return run(archive);
+  }
+}
+
+/** Reports packaging failures to release automation. */
+function main() i32 {
+  return match release_package.package() {
+    SystemResult.Ok => 0,
+    SystemResult.Error(error) => {
+      eprintln(error.message());
+      return 1;
+    }
+  };
+}
+manifest { libraries: ["stdlib.moon"] }

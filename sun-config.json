@@ -19,6 +19,12 @@
       "type": "binary",
       "output_name": "build/sun-gobject-tests",
       "test_binary_name": "build/sun-gobject-tests_test"
+    },
+    {
+      "name": "package-tool",
+      "path": "tools/package.sun",
+      "type": "binary",
+      "output_name": "build/release-package-tool"
     }
   ]
 }
