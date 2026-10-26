@@ -1,5 +1,8 @@
 {
   "root": true,
+  "sun_fmt": {
+    "ignore": ["src/generated/**", "tests/fixtures/**"]
+  },
   "sun_path": [
     "$SUN_GOBJECT_BUILD"
   ],

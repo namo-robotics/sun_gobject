@@ -19,7 +19,7 @@ jobs:
           -e XDG_CACHE_HOME=/workspaces/sun_gobject/tmp/ci/cache
           -e XDG_CONFIG_HOME=/workspaces/sun_gobject/tmp/ci/config
           -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev
-          bash -c 'mkdir -p "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" && ./build.sh && sun fmt --check src/sun_gobject.sun src/sun_gtk.sun src/support.sun src/generator src/gtk src/svg tools examples tests/main.sun tests/runtime.sun tests/support.sun tests/generator.sun tests/integration.sun tests/events.sun tests/event-client.sun'
+          bash -c 'mkdir -p "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" && ./build.sh && sun fmt --check src tools examples tests'
       - name: Upload generation evidence and test results
         if: always()
         uses: actions/upload-artifact@v4
