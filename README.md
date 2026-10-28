@@ -56,11 +56,21 @@ ABI compatibility across compiler or library changes.
 For incremental development:
 
 ```sh
-cmake -S native --preset dev-fast
+cmake -S src/native --preset dev-fast
 cmake --build build/native -j$(($(nproc)/2))
 sun tools/build.sun -- build
 sun tools/build.sun -- test
 ```
+
+If a checkout was previously configured with the old root-level `native/`
+directory, refresh its CMake cache once after updating:
+
+```sh
+cmake --fresh -S src/native --preset dev-fast
+```
+
+Build artifacts still live in `build/native/`; bundle IDs, public module names,
+archive names, and installation paths have not changed.
 
 Use the `dev-debug` preset for unoptimized native debugging. Run an individual
 test with:
@@ -168,16 +178,49 @@ flowchart TD
     UI --> Session[sun_ui state, reconciliation, and rendering]
 ```
 
+The source tree distinguishes generated declarations from checked wrappers and
+handwritten native support:
+
+```text
+src/
+  bindings/           # Selection and overrides consumed by the generator
+  generator/          # GIR-to-Sun generation tools
+  generated/          # Generated raw Sun declarations; ignored by Git
+  wrappers/
+    core.sun          # GLib/GObject ownership, properties, and signals
+    gtk/              # Checked GTK APIs and supporting extern declarations
+    svg/              # Checked librsvg APIs and supporting extern declarations
+  native/
+    gobject/          # Signal interoperability and ABI layout checks
+    gtk/
+      runtime/        # Main-thread checks, event queues, and source lifetimes
+      surfaces/       # Native drawing-surface callbacks and context lifetimes
+      widgets/        # Existing custom layout, media, and timeline behavior
+    tests/            # Native test probes
+    CMakeLists.txt
+    CMakePresets.json
+  sun_gobject.sun     # Maintained core bundle manifest
+  sun_gtk.sun         # Maintained GTK bundle manifest
+```
+
 | Component | Purpose |
 | --- | --- |
-| [`src/generator/`](src/generator/) | Read XML, load versioned GIR dependencies, translate supported C ABI types, and emit bindings. |
-| [`bindings/`](bindings/) | Select supported declarations in `selection.xml` and apply explicit metadata corrections in `overrides.xml`. |
-| [`src/support.sun`](src/support.sun) | Provide low-level reference ownership, property helpers, and signal connections. |
-| [`src/gtk/`](src/gtk/) | Provide checked widgets, drawing surfaces, save dialogs, and native events, with at most one class per file. Shared declarations and helpers live in support files. |
-| [`src/svg/`](src/svg/) | Own parsed librsvg documents and expose an explicit unsafe native render boundary, with separate document and viewport classes. |
-| [`native/`](native/) | Implement C signal adapters, event storage, UTF-8 validation, and the platform main-thread guard. |
+| [`src/bindings/`](src/bindings/) | Select declarations and correct GIR metadata through reviewed XML. |
+| [`src/generator/`](src/generator/) | Read GIR metadata and configuration, validate supported ABI types, and emit Sun declarations. |
+| `src/generated/` | Hold generator output using the existing `*.raw` modules. Do not hand-edit these files. |
+| [`src/wrappers/`](src/wrappers/) | Provide checked Sun ownership and convenience APIs. Handwritten `extern "C"` declarations stay beside their consumers and use Sun's existing FFI features. |
+| [`src/native/gobject/`](src/native/gobject/) | Adapt native signals and verify layouts that the wrappers rely on. |
+| [`src/native/gtk/runtime/`](src/native/gtk/runtime/) | Own native event storage, thread checks, and source lifetimes. |
+| [`src/native/gtk/surfaces/`](src/native/gtk/surfaces/) | Integrate retained rendering callbacks with GTK's context and widget lifecycle. |
+| [`src/native/gtk/widgets/`](src/native/gtk/widgets/) | Isolate the existing custom widget behavior from generic binding support. This code is handwritten functionality, not generated bindings. |
 | [`tools/build.sun`](tools/build.sun) | Orchestrate generation, Sun compilation, tests, and installation. |
-| [`tests/`](tests/) | Test the generator, runtime helpers, event loop, GTK demo, and an isolated installed consumer. |
+| [`tests/`](tests/) | Test generation, ownership, events, native widgets, and installed consumers. |
+
+Prefer generated declarations for supported upstream APIs and implement checks and
+convenience behavior in Sun wrappers where practical. Add C only for native
+interoperability or behavior that cannot reasonably be implemented in Sun. The
+custom widget directory makes the existing broader scope explicit; reorganizing
+these files does not move that behavior into another repository.
 
 Bundle manifests are maintained in `src/sun_gobject.sun` and `src/sun_gtk.sun`.
 Update their source lists when adding or moving binding files. Generated Sun

@@ -193,9 +193,9 @@ module build_tasks {
     println("Generating bindings");
     var generate = std.process.Command(a, "build/sun-gir");
     generate.add_arg("--selection");
-    generate.add_arg("bindings/selection.xml");
+    generate.add_arg("src/bindings/selection.xml");
     generate.add_arg("--overrides");
-    generate.add_arg("bindings/overrides.xml");
+    generate.add_arg("src/bindings/overrides.xml");
     generate.add_arg("--output-dir");
     generate.add_arg("build/generated");
     generate.add_arg("--source-dir");

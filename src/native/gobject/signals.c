@@ -1,4 +1,4 @@
-#include "signals.h"
+#include "gobject/signals.h"
 #include <stddef.h>
 /* Sun cannot express GValue's union. The support layer reserves two ABI slots;
  * these assertions are checked against the exact headers we link against. */

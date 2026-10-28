@@ -49,7 +49,7 @@ public module gobject {
     return OwnedObject(pointer);
   }
 
-  // GValue's data union is opaque. native/signals.c verifies size/offsets.
+  /** Holds opaque GValue storage whose layout is verified in src/native/gobject/signals.c. */
   class Value {
     var type: u64 = 0;
     var slot0: u64 = 0;

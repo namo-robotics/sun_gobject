@@ -4,7 +4,7 @@
     {
       "name": "dev-fast",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/../build/native",
+      "binaryDir": "${sourceDir}/../../build/native",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "clang",

@@ -1,4 +1,4 @@
-#include "../view.h"
+#include "gtk/widgets/view.h"
 #include <glib-object.h>
 static int finalized;
 /** Records finalization without modifying the object being destroyed. */

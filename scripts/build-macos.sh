@@ -9,7 +9,7 @@ export PKG_CONFIG_PATH="${PKG_CONFIG_PATH:-}:$(brew --prefix libffi)/lib/pkgconf
 compiler=${SUN_EXECUTABLE:-sun}
 mkdir -p build/generated src/generated tmp
 "$compiler" tools/build.sun -- prepare
-cmake -S native -B build/native -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+cmake -S src/native -B build/native -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native --parallel 2
 "$compiler" --dynamic -L"$(brew --prefix)/lib" -lglib-2.0 -c -o build/sun-gir src/generator/main.sun
 # Homebrew keeps some transitive GIR files inside their individual kegs.
@@ -17,7 +17,7 @@ gir_paths=()
 for directory in "$(brew --prefix)"/opt/*/share/gir-1.0; do
   if [[ -d "$directory" ]]; then gir_paths+=(--gir-dir "$directory"); fi
 done
-build/sun-gir --selection bindings/selection.xml --overrides bindings/overrides.xml \
+build/sun-gir --selection src/bindings/selection.xml --overrides src/bindings/overrides.xml \
   --output-dir build/generated --source-dir src/generated --target arm64-apple-darwin \
   --gir-dir "${SUN_GTK_PREFIX:-$(brew --prefix gtk4)}/share/gir-1.0" \
   --gir-dir "$(brew --prefix glib)/share/gir-1.0" \

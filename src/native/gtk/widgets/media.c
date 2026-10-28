@@ -1,5 +1,5 @@
-#include "media.h"
-#include "ui.h"
+#include "gtk/widgets/media.h"
+#include "gtk/runtime/ui.h"
 #include <math.h>
 #include <string.h>
 

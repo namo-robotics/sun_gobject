@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
-#include "ui.h"
-#include "view.h"
+#include "gtk/runtime/ui.h"
+#include "gtk/widgets/view.h"
 #include <string.h>
 #ifdef __APPLE__
 #include <pthread.h>

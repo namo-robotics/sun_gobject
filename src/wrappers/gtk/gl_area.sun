@@ -1,0 +1,73 @@
+using std;
+
+/** Provides an owned OpenGL widget with external retained rendering callbacks. */
+public module gtk {
+
+  /** Creates the native widget and retains the supplied callback target. */
+  extern "C" function sg_gl_area_new(data: raw_ptr<u8>, render: function (raw_ptr<u8>, i32, i32) i32, reset: function (raw_ptr<u8>, i32) void, retain: function (raw_ptr<u8>) void, release: function (raw_ptr<u8>) void, input: function (raw_ptr<u8>, i32, i32, f64, f64) void) raw_ptr<u8>;
+
+  /** Requests a frame at the GTK drawing boundary. */
+  extern "C" function sg_gl_area_queue(area: raw_ptr<u8>) void;
+
+  /** Borrows the native context diagnostic. */
+  extern "C" function sg_gl_area_error(area: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Releases GDK's current-context cache before an external host renders. */
+  extern "C" function sg_gl_clear_current() void;
+
+  /** Hands context ownership to another main-thread graphics host. */
+  public function clear_gl_context() void {
+    require_thread();
+    unsafe { sg_gl_clear_current(); };
+  }
+
+  /** Owns a GTK OpenGL surface whose callbacks retain no borrowed Sun state. */
+  public class GLArea {
+    var pointer: raw_ptr<u8> = null;
+
+    /** Retains an external native target; callbacks must remain valid until final release. */
+    init(data: raw_ptr<u8>, render: function (raw_ptr<u8>, i32, i32) i32, reset: function (raw_ptr<u8>, i32) void, retain: function (raw_ptr<u8>) void, release: function (raw_ptr<u8>) void, input: function (raw_ptr<u8>, i32, i32, f64, f64) void) SystemResult<void> {
+      require_thread();
+      if (unsafe { gtk_init_check(); } == 0) {
+        return SystemResult.Error(Error(1, "Cannot initialize GTK"));
+      }
+      this.pointer = unsafe { sg_gl_area_new(data, render, reset, retain, release, input); };
+      if (this.pointer == null) {
+        return SystemResult.Error(Error(1, "Invalid GL rendering source"));
+      }
+    }
+
+    /** Retains an independent reference to an existing surface. */
+    init(other: const ref GLArea) {
+      require_thread();
+      this.pointer = other.pointer;
+      unsafe { gobject.raw.g_object_ref(this.pointer); };
+    }
+
+    /** Releases the widget reference on its owning thread. */
+    deinit() {
+      require_thread();
+      if (this.pointer != null) {
+        unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Reports whether two wrappers retain the same native surface. */
+    public const method same(other: const ref GLArea) bool {
+      require_thread();
+      return this.pointer == other.pointer;
+    }
+
+    /** Requests a redraw of the latest submitted content. */
+    public method redraw() void {
+      require_thread();
+      unsafe { sg_gl_area_queue(this.pointer); };
+    }
+
+    /** Copies any context-creation error for application reporting. */
+    public const method error() String {
+      require_thread();
+      return from_c_str(make_heap_allocator(), unsafe { sg_gl_area_error(this.pointer); });
+    }
+  }
+}

@@ -21,6 +21,14 @@ public module gtk {
       this.pointer = unsafe { sg_view_new(kind); };
     }
 
+    /** Retains a GL surface as a declarative leaf widget. */
+    init(area: const ref GLArea) {
+      require_thread();
+      this.kind = 11;
+      this.pointer = area.pointer;
+      unsafe { gobject.raw.g_object_ref(this.pointer); };
+    }
+
     /** Releases the wrapper's independent native reference. */
     deinit() {
       require_thread();

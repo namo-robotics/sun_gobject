@@ -1,6 +1,6 @@
-#include "view.h"
-#include "media.h"
-#include "ui.h"
+#include "gtk/widgets/view.h"
+#include "gtk/widgets/media.h"
+#include "gtk/runtime/ui.h"
 #include <string.h>
 
 /** Owns one automatic, fixed, or weighted grid track. */

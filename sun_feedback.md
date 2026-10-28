@@ -31,7 +31,7 @@ until an upstream fix is verified in the compiler used by this project.
   with no implicit signature coercion. A mismatched invocation must remain unsafe.
 - **Impact:** GObject's `GCallback` erases signal argument types; a typed Sun module
   function cannot be passed directly to `g_signal_connect_data`.
-- **Workaround:** `native/signals.c` validates the runtime signal signature before
+- **Workaround:** `src/native/gobject/signals.c` validates the runtime signal signature before
   connecting a typed trampoline. It also converts GClosure's destroy callback to
   the userdata-only cleanup callback and handles exactly-once cleanup.
 - **Acceptance:** A typed callback can cross an explicitly erased C API and be
