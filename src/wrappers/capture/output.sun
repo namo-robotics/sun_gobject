@@ -1,0 +1,81 @@
+using std;
+
+/** Provides exclusive output reservation and publication without overwriting files. */
+public module desktop {
+
+  /** Reserves a private file in a directory. */
+  extern "C" function sg_output_new(directory: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Closes and removes unpublished output. */
+  extern "C" function sg_output_free(p: raw_ptr<u8>) void;
+
+  /** Borrows the private output descriptor. */
+  extern "C" function sg_output_fd(p: raw_ptr<u8>) i32;
+
+  /** Borrows the latest output diagnostic. */
+  extern "C" function sg_output_error(p: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Flushes and publishes without replacing an existing file. */
+  extern "C" function sg_output_publish(p: raw_ptr<u8>, destination: raw_ptr<u8>) i32;
+
+  /** Owns a private file until successful publication or destructor cleanup. */
+  public class Output {
+    var pointer: raw_ptr<u8> = null;
+
+    /** Creates an idle output owner without touching disk. */
+    init() {}
+
+    /** Removes only an unpublished file reserved by this owner. */
+    deinit() {
+      unsafe { sg_output_free(this.pointer); };
+    }
+
+    /** Reserves one file after capture selection and countdown have finished. */
+    public method reserve(directory: ref String) SystemResult<void> {
+      try validate(directory);
+      if (this.pointer != null) {
+        return SystemResult.Error(Error(1, "Output already reserved"));
+      }
+      this.pointer = unsafe { sg_output_new(directory.c_str()); };
+      if (unsafe { sg_output_fd(this.pointer); } < 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Copies a native output failure. */
+    public method error() Error {
+      if (this.pointer == null) {
+        return Error(1, "Output has not been reserved");
+      }
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_output_error(this.pointer); })
+      );
+    }
+
+    /** Borrows the descriptor for a pipeline configured before publication. */
+    public method descriptor() SystemResult<i32> {
+      if (this.pointer == null) {
+        return SystemResult.Error(this.error());
+      }
+      var fd = unsafe { sg_output_fd(this.pointer); };
+      if (fd < 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok(fd);
+    }
+
+    /** Publishes finalized output; callers must first stop the writing pipeline. */
+    public method publish(destination: ref String) SystemResult<void> {
+      try validate(destination);
+      if (this.pointer == null) {
+        return SystemResult.Error(this.error());
+      }
+      if (unsafe { sg_output_publish(this.pointer, destination.c_str()); } == 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+  }
+}

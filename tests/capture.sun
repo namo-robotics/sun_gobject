@@ -1,0 +1,190 @@
+using std;
+
+/** Tests checked capture wrappers using a private portal and virtual display. */
+module capture_binding_tests {
+
+  /** Preserves system and assertion diagnostics in native acceptance tests. */
+  enum TestResult<T> { Ok(T), Assertion(std.test.AssertionError), System(Error) }
+
+  /** Starts a mock portal on a separate native dispatch thread. */
+  extern "C" function sg_capture_test_portal(mode: i32) raw_ptr<u8>;
+
+  /** Stops the mock after clients have released their sessions. */
+  extern "C" function sg_capture_test_portal_free(p: raw_ptr<u8>) void;
+
+  /** Emits the portal's Closed signal. */
+  extern "C" function sg_capture_test_revoke(p: raw_ptr<u8>) void;
+
+  /** Reads permission or closure call counts. */
+  extern "C" function sg_capture_test_count(p: raw_ptr<u8>, closed: i32) i32;
+
+  /** Sends pointer input to the actual native selection window. */
+  extern "C" function sg_capture_test_input(kind: i32, x: i32, y: i32) i32;
+
+  /** Verifies the native outline's geometry and hollow shape. */
+  extern "C" function sg_capture_test_outline(x: i32, y: i32, width: i32, height: i32) i32;
+
+  /** Owns a mock service for one sequential acceptance test. */
+  class Mock {
+    public var pointer: raw_ptr<u8>;
+
+    /** Starts the service with the requested response mode. */
+    init(mode: i32) {
+      this.pointer = unsafe { sg_capture_test_portal(mode); };
+    }
+
+    /** Releases the service and its dispatch thread. */
+    deinit() {
+      unsafe { sg_capture_test_portal_free(this.pointer); };
+    }
+  }
+
+  /** Waits for one portal response with a bounded deadline. */
+  function response(portal: ref desktop.Portal) SystemResult<i32> {
+    var start = std.time.now();
+    while (start.elapsed().as_secs() < 3) {
+      var event = try portal.poll();
+      if (event != 0) {
+        return SystemResult.Ok(event);
+      }
+      std.time.sleep(std.time.create_duration_millis(2));
+    }
+    return SystemResult.Error(Error(1, "Portal response timed out"));
+  }
+
+  /** Exercises responses delivered before method returns, geometry, descriptors, and cleanup. */
+  test_function portal_round_trip() TestResult<void> {
+    var mock = Mock(0);
+    if (true) {
+      var portal = desktop.Portal();
+      for (var step: i32 = 0; step < 3; step += 1) {
+        try portal.request(step, false, true);
+        try std.test.assert_eq(try response(portal), 1);
+      }
+      try std.test.assert_eq(try portal.geometry(2), 320);
+      try std.test.assert_eq(try portal.geometry(3), 240);
+      try std.test.assert(portal.target(false).equals_literal("42"));
+      try std.test.assert(portal.target(true).equals_literal("123456"));
+      try std.test.assert(try portal.remote() >= 0);
+      try std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 0); }, 3);
+    }
+    try std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 1); }, 1);
+    return TestResult.Ok;
+  }
+
+  /** Portal cancellation is distinct from denied permission and malformed responses. */
+  test_function portal_cancel_and_failure() TestResult<void> {
+    for (var mode: i32 = 1; mode <= 4; mode += 1) {
+      var mock = Mock(mode);
+      var portal = desktop.Portal();
+      try portal.request(0, false, true);
+      if (mode == 1) {
+        try std.test.assert_eq(try response(portal), 2);
+      } else if (mode == 2) {
+        match response(portal) {
+          SystemResult.Ok(_) => {
+            try std.test.fail("Permission denial was accepted");
+          },
+          SystemResult.Error(_) => {}
+        };
+      } else {
+        try std.test.assert_eq(try response(portal), 1);
+        try portal.request(1, false, true);
+        try response(portal);
+        try portal.request(2, false, true);
+        if (mode == 3) {
+          match response(portal) {
+            SystemResult.Ok(_) => {
+              try std.test.fail("Missing stream was accepted");
+            },
+            SystemResult.Error(_) => {}
+          };
+        } else {
+          try response(portal);
+          match portal.geometry(2) {
+            SystemResult.Ok(_) => {
+              try std.test.fail("Missing geometry was accepted");
+            },
+            SystemResult.Error(_) => {}
+          };
+        }
+      }
+    }
+    return TestResult.Ok;
+  }
+
+  /** A Closed signal revokes access to the authorized PipeWire connection. */
+  test_function portal_revocation() TestResult<void> {
+    var mock = Mock(0);
+    var portal = desktop.Portal();
+    try portal.request(0, false, true);
+    try response(portal);
+    unsafe { sg_capture_test_revoke(mock.pointer); };
+    try std.test.assert_eq(try response(portal), 3);
+    match portal.remote() {
+      SystemResult.Ok(_) => {
+        try std.test.fail("Opened a revoked remote");
+      },
+      SystemResult.Error(_) => {}
+    };
+    return TestResult.Ok;
+  }
+
+  /** Pumps input after injecting an event, allowing X11 to deliver it asynchronously. */
+  function input(selector: ref desktop.Selection, kind: i32, x: i32, y: i32) TestResult<i32> {
+    try std.test.assert(unsafe { sg_capture_test_input(kind, x, y); } != 0);
+    var event: i32 = 0;
+    for (var i = 0; i < 20; i += 1) {
+      event = try selector.poll();
+      if (event != 0) {
+        return TestResult.Ok(event);
+      }
+      std.time.sleep(std.time.create_duration_millis(2));
+    }
+    return TestResult.Ok(event);
+  }
+
+  /** Repeated forward and reverse drags retain four edges without covering the desktop. */
+  test_function live_selection() TestResult<void> {
+    var selection = desktop.Selection();
+    try selection.open(0, 0, 320, 240);
+    try input(selection, 1, 20, 30);
+    for (var i = 0; i < 8; i += 1) {
+      try input(selection, 2, 170, 130);
+      try std.test.assert_eq(unsafe { sg_capture_test_outline(20, 30, 150, 100); }, 1);
+      try input(selection, 2, 5, 10);
+      try std.test.assert_eq(unsafe { sg_capture_test_outline(5, 10, 15, 20); }, 1);
+    }
+    try std.test.assert_eq(try input(selection, 3, 170, 130), 1);
+    try std.test.assert_eq(selection.x, 20);
+    try std.test.assert_eq(selection.y, 30);
+    try std.test.assert_eq(selection.width, 150);
+    try std.test.assert_eq(selection.height, 100);
+    return TestResult.Ok;
+  }
+
+  /** Escape releases the grab and missing geometry fails before selection can begin. */
+  test_function selection_cancel_and_invalid_geometry() TestResult<void> {
+    var selection = desktop.Selection();
+    try selection.open(0, 0, 320, 240);
+    try std.test.assert_eq(try input(selection, 4, 0, 0), 2);
+    match selection.open(-1, 0, 320, 240) {
+      SystemResult.Ok => {
+        try std.test.fail("Accepted invalid screen geometry");
+      },
+      SystemResult.Error(_) => {}
+    };
+    return TestResult.Ok;
+  }
+}
+
+/** Provides the companion executable for the capture binding tests. */
+function main() i32 {
+  return 0;
+}
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_capture.moon"
+  ]
+}

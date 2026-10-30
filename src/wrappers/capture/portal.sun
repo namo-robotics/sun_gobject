@@ -1,0 +1,94 @@
+using std;
+
+/** Exposes explicit portal requests with polled responses and owned descriptor cleanup. */
+public module desktop {
+
+  /** Allocates a bus connection owner. */
+  extern "C" function sg_portal_new() raw_ptr<u8>;
+
+  /** Releases subscriptions, requests, session, and descriptor. */
+  extern "C" function sg_portal_free(p: raw_ptr<u8>) void;
+
+  /** Borrows the latest diagnostic. */
+  extern "C" function sg_portal_error(p: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Sends a selected portal method. */
+  extern "C" function sg_portal_request(p: raw_ptr<u8>, step: i32, types: i32, cursor: i32) i32;
+
+  /** Dispatches pending native responses. */
+  extern "C" function sg_portal_poll(p: raw_ptr<u8>) i32;
+
+  /** Reads one authorized screen coordinate or dimension. */
+  extern "C" function sg_portal_geometry(p: raw_ptr<u8>, field: i32) i32;
+
+  /** Opens an owned PipeWire descriptor. */
+  extern "C" function sg_portal_remote(p: raw_ptr<u8>) i32;
+
+  /** Allocates a PipeWire node or serial string. */
+  extern "C" function sg_portal_target(p: raw_ptr<u8>, serial: i32) raw_ptr<u8>;
+
+  /** Owns one ScreenCast session; callers choose when each permission step advances. */
+  public class Portal {
+    var pointer: raw_ptr<u8>;
+
+    /** Connects to the session bus without requesting desktop access. */
+    init() {
+      this.pointer = unsafe { sg_portal_new(); };
+    }
+
+    /** Cancels outstanding permission requests and releases the session. */
+    deinit() {
+      unsafe { sg_portal_free(this.pointer); };
+    }
+
+    /** Copies the latest native failure. */
+    public method error() Error {
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_portal_error(this.pointer); })
+      );
+    }
+
+    /** Sends CreateSession, SelectSources, or Start in the caller's chosen sequence. */
+    public method request(step: i32, window: bool, cursor: bool) SystemResult<void> {
+      if (unsafe { sg_portal_request(this.pointer, step, window ? 2 : 1, cursor ? 2 : 1); } == 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Returns pending, success, cancelled, or closed; native failures return an error. */
+    public method poll() SystemResult<i32> {
+      var result = unsafe { sg_portal_poll(this.pointer); };
+      if (result < 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok(result);
+    }
+
+    /** Reads x, y, width, or height; missing portal geometry is reported as an error. */
+    public method geometry(field: i32) SystemResult<i32> {
+      var value = unsafe { sg_portal_geometry(this.pointer, field); };
+      if (field < 0 or field > 3 or value < 0) {
+        return SystemResult.Error(
+          Error(1, "This desktop does not provide usable screen geometry for live selection")
+        );
+      }
+      return SystemResult.Ok(value);
+    }
+
+    /** Borrows the authorized descriptor until this session is destroyed. */
+    public method remote() SystemResult<i32> {
+      var fd = unsafe { sg_portal_remote(this.pointer); };
+      if (fd < 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok(fd);
+    }
+
+    /** Copies the preferred serial or fallback node identifier. */
+    public method target(serial: bool) String {
+      return take_text(unsafe { sg_portal_target(this.pointer, serial ? 1 : 0); });
+    }
+  }
+}

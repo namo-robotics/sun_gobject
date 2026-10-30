@@ -1,0 +1,69 @@
+using std;
+
+/** Provides owned Linux capture resources without running Sun on native callback threads. */
+public module desktop {
+
+  /** Installs signal handling in a dedicated capture process. */
+  extern "C" function sg_capture_signals() void;
+
+  /** Reads the process stop or cancel request. */
+  extern "C" function sg_capture_signal() i32;
+
+  /** Borrows a configured media directory. */
+  extern "C" function sg_capture_directory(video: i32) raw_ptr<u8>;
+
+  /** Allocates a timestamp with a random suffix. */
+  extern "C" function sg_capture_stamp() raw_ptr<u8>;
+
+  /** Frees a native allocated string. */
+  extern "C" function sg_capture_string_free(text: raw_ptr<u8>) void;
+
+  /** Reads the available processor count. */
+  extern "C" function sg_capture_cpus() i32;
+
+  /** Copies a valid native string before releasing its allocation. */
+  function take_text(pointer: raw_ptr<u8>) String {
+    var text = from_c_str(make_heap_allocator(), pointer);
+    unsafe { sg_capture_string_free(pointer); };
+    return text;
+  }
+
+  /** Rejects embedded NUL characters before passing a string to native APIs. */
+  function validate(text: ref String) SystemResult<void> {
+    for (var i: i64 = 0; i < text.length(); i += 1) {
+      if (match text.at(i) {
+        AccessResult.Ok(value) => value == 0,
+        AccessResult.OutOfBounds(_) => true
+      }) {
+        return SystemResult.Error(Error(1, "Native text contains a NUL byte"));
+      }
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Installs handlers for this dedicated helper's interrupt and termination signals. */
+  public function install_signals() void {
+    unsafe { sg_capture_signals(); };
+  }
+
+  /** Returns zero while idle, one for finish, or two for cancellation. */
+  public function signal_request() i32 {
+    return unsafe { sg_capture_signal(); };
+  }
+
+  /** Copies the user's configured pictures or videos directory. */
+  public function media_directory(video: bool) String {
+    return from_c_str(make_heap_allocator(), unsafe { sg_capture_directory(video ? 1 : 0); });
+  }
+
+  /** Generates a unique timestamp for an output filename. */
+  public function filename_stamp() String {
+    return take_text(unsafe { sg_capture_stamp(); });
+  }
+
+  /** Returns an encoder budget capped at half the available cores and a small upper limit. */
+  public function encoder_threads() i32 {
+    var count = unsafe { sg_capture_cpus(); } / 2;
+    return count < 1 ? 1 : count > 4 ? 4 : count;
+  }
+}

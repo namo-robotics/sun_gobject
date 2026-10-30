@@ -1,0 +1,154 @@
+using std;
+
+/** Owns a GStreamer pipeline while native callbacks stay within the adapter. */
+public module desktop {
+
+  /** Parses a pipeline description. */
+  extern "C" function sg_pipeline_new(description: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Stops and releases streaming resources. */
+  extern "C" function sg_pipeline_free(p: raw_ptr<u8>) void;
+
+  /** Borrows the latest pipeline diagnostic. */
+  extern "C" function sg_pipeline_error(p: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Configures native source and sink descriptors. */
+  extern "C" function sg_pipeline_configure(
+    p: raw_ptr<u8>,
+    output: i32,
+    remote: i32,
+    target: raw_ptr<u8>,
+    node: raw_ptr<u8>
+  ) i32;
+
+  /** Sets immutable logical crop bounds. */
+  extern "C" function sg_pipeline_crop(
+    p: raw_ptr<u8>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    logical_width: i32,
+    logical_height: i32
+  ) i32;
+
+  /** Installs caps probes and starts streaming. */
+  extern "C" function sg_pipeline_play(p: raw_ptr<u8>) i32;
+
+  /** Consumes a native bus message. */
+  extern "C" function sg_pipeline_poll(p: raw_ptr<u8>) i32;
+
+  /** Drains queued buffers through the encoder and muxer. */
+  extern "C" function sg_pipeline_finish(p: raw_ptr<u8>) i32;
+
+  /** Keeps pipeline state and streaming callbacks alive until close or destruction. */
+  public class Pipeline {
+    var pointer: raw_ptr<u8> = null;
+    var started: bool = false;
+
+    /** Creates an idle pipeline owner. */
+    init() {}
+
+    /** Stops streaming before releasing callback state. */
+    deinit() {
+      this.close();
+    }
+
+    /** Releases the pipeline; repeated closure is harmless. */
+    public method close() void {
+      unsafe { sg_pipeline_free(this.pointer); };
+      this.pointer = null;
+      this.started = false;
+    }
+
+    /** Copies the latest native failure. */
+    public method error() Error {
+      if (this.pointer == null) {
+        return Error(1, "Pipeline has not been configured");
+      }
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_pipeline_error(this.pointer); })
+      );
+    }
+
+    /** Parses a trusted application description and configures its source and sink. */
+    public method configure(
+      description: ref String,
+      output: ref Output,
+      remote: i32,
+      target: ref String,
+      node: ref String
+    ) SystemResult<void> {
+      try validate(description);
+      try validate(target);
+      try validate(node);
+      if (this.pointer != null) {
+        return SystemResult.Error(Error(1, "Pipeline already configured"));
+      }
+      var fd = try output.descriptor();
+      this.pointer = unsafe { sg_pipeline_new(description.c_str()); };
+      if (unsafe {
+        sg_pipeline_configure(this.pointer, fd, remote, target.c_str(), node.c_str());
+      } == 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Maps a logical selection to stream pixels before frames reach the encoder. */
+    public method crop(
+      x: i32,
+      y: i32,
+      width: i32,
+      height: i32,
+      logical_width: i32,
+      logical_height: i32
+    ) SystemResult<void> {
+      if (this.pointer == null or this.started) {
+        return SystemResult.Error(Error(1, "Configure crop before starting the pipeline"));
+      }
+      if (unsafe {
+        sg_pipeline_crop(this.pointer, x, y, width, height, logical_width, logical_height);
+      } == 0) {
+        return SystemResult.Error(Error(1, "The selected area is outside the shared screen"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Starts the configured pipeline once. */
+    public method play() SystemResult<void> {
+      if (this.pointer == null or this.started) {
+        return SystemResult.Error(Error(1, "Pipeline is not ready to start"));
+      }
+      this.started = true;
+      if (unsafe { sg_pipeline_play(this.pointer); } == 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Returns pending, playing, EOS, or source failure; other errors remain failures. */
+    public method poll() SystemResult<i32> {
+      if (this.pointer == null) {
+        return SystemResult.Error(this.error());
+      }
+      var value = unsafe { sg_pipeline_poll(this.pointer); };
+      if (value < 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok(value);
+    }
+
+    /** Sends EOS downstream of a potentially revoked desktop source. */
+    public method finish() SystemResult<void> {
+      if (this.pointer == null) {
+        return SystemResult.Error(this.error());
+      }
+      if (unsafe { sg_pipeline_finish(this.pointer); } == 0) {
+        return SystemResult.Error(this.error());
+      }
+      return SystemResult.Ok;
+    }
+  }
+}

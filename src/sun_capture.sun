@@ -1,0 +1,14 @@
+/** Bundles Linux desktop capture ownership and selection without adding dependencies to GTK clients. */
+manifest {
+  library_id: "namo-robotics/sun_capture"
+  source_files: [
+    "wrappers/capture/runtime.sun",
+    "wrappers/capture/portal.sun",
+    "wrappers/capture/output.sun",
+    "wrappers/capture/pipeline.sun",
+    "wrappers/capture/selection.sun"
+  ]
+  libraries: [
+    "stdlib.moon"
+  ]
+}

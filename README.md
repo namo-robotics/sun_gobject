@@ -305,3 +305,27 @@ be reused on macOS. Intel macOS is not covered by these releases.
 
 See [.devcontainer/README.md](.devcontainer/README.md) for the applied Sun template
 version, project-specific settings, and rebuild instructions.
+
+### Linux desktop capture
+
+`sun_capture.moon` and `libsun_capture_native.a` provide separately linked capture
+support. They do not add GStreamer or X11 dependencies to ordinary GTK clients.
+The checked `desktop.Portal`, `desktop.Selection`, `desktop.Pipeline`, and
+`desktop.Output` owners keep native handles and callbacks out of application code.
+Applications explicitly advance permission requests, selection, countdown, and
+publication in Sun; native callbacks only retain responses or handle synchronous
+stream caps. `Pipeline` duplicates input/output descriptors and stops streaming
+before freeing callback storage. `Output` reserves private files and publishes
+with a hard link so an existing destination cannot be replaced.
+
+This bundle currently targets Linux. Area selection uses an X11 input grab and a
+hollow shaped outline within portal-provided monitor geometry; it rejects missing
+or unsupported geometry. It does not promise native Wayland area selection.
+Build dependencies are `gio-unix-2.0`, `gstreamer-1.0`, `x11`, and `xext` development
+packages. Runtime encoder plugins and a ScreenCast portal are supplied by the
+application's distribution package.
+
+The regular Linux build includes `tests/capture.sun`. Tests run against a private
+mock portal and Xvfb, covering response ordering, cancellation, denial, descriptor
+transfer, revocation, cleanup, and repeated live selection redraws. No real desktop
+frames are captured by these tests.

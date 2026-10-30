@@ -233,6 +233,32 @@ module build_tasks {
     gtk.add_arg("build/sun_gtk.moon");
     gtk.add_arg("src/sun_gtk.sun");
     try run(gtk);
+    var capture_bundle = try compile(false);
+    capture_bundle.add_arg("--emit-moon");
+    capture_bundle.add_arg("-o");
+    capture_bundle.add_arg("build/sun_capture.moon");
+    capture_bundle.add_arg("src/sun_capture.sun");
+    try run(capture_bundle);
+    var capture_tests = try compile(true);
+    capture_tests.add_arg("-lsun_capture_test_support");
+    capture_tests.add_arg("-lsun_capture_native");
+    var capture_pkg = std.process.Command(a, "pkg-config");
+    capture_pkg.add_arg("--libs");
+    capture_pkg.add_arg("gio-unix-2.0");
+    capture_pkg.add_arg("gstreamer-1.0");
+    capture_pkg.add_arg("x11");
+    capture_pkg.add_arg("xext");
+    var capture_flags = try capture(capture_pkg);
+    var capture_words = capture_flags.split_whitespace(a);
+    for (var flag: ref String in capture_words) {
+      capture_tests.add_arg(flag);
+    }
+    capture_tests.add_arg("--force-rebuild");
+    capture_tests.add_arg("-c");
+    capture_tests.add_arg("-o");
+    capture_tests.add_arg("build/capture-tests");
+    capture_tests.add_arg("tests/capture.sun");
+    try run(capture_tests);
     println("Compiling GTK demo");
     var demo = try compile(true);
     demo.add_arg("-l:libsun_gobject_native.a");
@@ -306,6 +332,7 @@ module build_tasks {
     bundles.add_arg("-m644");
     bundles.add_arg("build/sun_gobject.moon");
     bundles.add_arg("build/sun_gtk.moon");
+    bundles.add_arg("build/sun_capture.moon");
     bundles.add_arg(lib);
     try run(bundles);
     var generator = std.process.Command(a, "install");
@@ -339,7 +366,22 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     tests.add_arg("--test-sequential");
     match tests.status() {
       SystemResult.Ok(status) => {
-        return status;
+        if (status != 0) {
+          return status;
+        }
+        var capture_tests = std.process.Command(a, "dbus-run-session");
+        capture_tests.add_arg("--");
+        capture_tests.add_arg("xvfb-run");
+        capture_tests.add_arg("-a");
+        capture_tests.add_arg("build/capture-tests_test");
+        capture_tests.add_arg("--test-sequential");
+        return match capture_tests.status() {
+          SystemResult.Ok(code) => code,
+          SystemResult.Error(error) => {
+            eprintln(error.message());
+            return 1;
+          }
+        };
       },
       SystemResult.Error(error) => {
         eprintln(error.message());

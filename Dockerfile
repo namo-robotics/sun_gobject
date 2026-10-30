@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-20 clangd-20 clang-format-20 lldb-20 lld-20 llvm-20-dev llvm-20-tools libclang-20-dev \
     libzstd-dev zlib1g-dev libxml2-dev libedit-dev libncurses-dev libcurl4-openssl-dev \
     libgtest-dev protobuf-compiler libprotobuf-dev libprotoc-dev \
-    libgtk-4-dev librsvg2-2 fonts-dejavu-core libgirepository1.0-dev gobject-introspection pkg-config \
+    libgstreamer1.0-dev libx11-dev libxext-dev libgtk-4-dev librsvg2-2 fonts-dejavu-core libgirepository1.0-dev gobject-introspection pkg-config \
     gstreamer1.0-libav gstreamer1.0-plugins-good xvfb xauth dbus-x11 ccache gdb sudo locales curl bash-completion \
     && locale-gen en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \

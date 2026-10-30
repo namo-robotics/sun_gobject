@@ -1,0 +1,113 @@
+using std;
+
+/** Implements live rectangle selection in Sun over a bounded native input surface. */
+public module desktop {
+
+  /** Creates an input surface for the authorized screen. */
+  extern "C" function sg_selection_new(x: i32, y: i32, width: i32, height: i32) raw_ptr<u8>;
+
+  /** Releases windows and input grabs. */
+  extern "C" function sg_selection_free(p: raw_ptr<u8>) void;
+
+  /** Borrows a native diagnostic. */
+  extern "C" function sg_selection_error(p: raw_ptr<u8>) raw_ptr<u8>;
+
+  /** Reads one input event. */
+  extern "C" function sg_selection_poll(p: raw_ptr<u8>) i32;
+
+  /** Reads the last pointer coordinate. */
+  extern "C" function sg_selection_coordinate(p: raw_ptr<u8>, axis: i32) i32;
+
+  /** Replaces the visible hollow outline. */
+  extern "C" function sg_selection_draw(
+    p: raw_ptr<u8>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32
+  ) void;
+
+  /** Owns a desktop input grab while Sun clamps and confirms the selected rectangle. */
+  public class Selection {
+    var pointer: raw_ptr<u8> = null;
+    var screen_width: i32 = 0;
+    var screen_height: i32 = 0;
+    var start_x: i32 = 0;
+    var start_y: i32 = 0;
+    var dragging: bool = false;
+    public var x: i32 = 0;
+    public var y: i32 = 0;
+    public var width: i32 = 0;
+    public var height: i32 = 0;
+
+    /** Creates an idle selector without opening a display connection. */
+    init() {}
+
+    /** Releases input and removes the outline on every exit path. */
+    deinit() {
+      this.close();
+    }
+
+    /** Releases native resources while preserving the confirmed coordinates. */
+    public method close() void {
+      unsafe { sg_selection_free(this.pointer); };
+      this.pointer = null;
+    }
+
+    /** Opens a selector only for valid portal-provided geometry. */
+    public method open(x: i32, y: i32, width: i32, height: i32) SystemResult<void> {
+      if (this.pointer != null) {
+        return SystemResult.Error(Error(1, "Selection already open"));
+      }
+      this.screen_width = width;
+      this.screen_height = height;
+      this.pointer = unsafe { sg_selection_new(x, y, width, height); };
+      var error = from_c_str(make_heap_allocator(), unsafe { sg_selection_error(this.pointer); });
+      if (not error.is_empty()) {
+        this.close();
+        return SystemResult.Error(Error(1, error));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Advances one input event; returns one on confirmation, two on cancellation, or zero. */
+    public method poll() SystemResult<i32> {
+      if (this.pointer == null) {
+        return SystemResult.Error(Error(1, "Selection is not open"));
+      }
+      var event = unsafe { sg_selection_poll(this.pointer); };
+      if (event < 0) {
+        return SystemResult.Error(Error(1, "Area selection failed"));
+      }
+      if (event == 4) {
+        this.close();
+        return SystemResult.Ok(2);
+      }
+      var px = unsafe { sg_selection_coordinate(this.pointer, 0); };
+      var py = unsafe { sg_selection_coordinate(this.pointer, 1); };
+      if (event == 1 and px >= 0 and py >= 0 and px < this.screen_width and
+        py < this.screen_height) {
+        this.start_x = px;
+        this.start_y = py;
+        this.dragging = true;
+        this.width = 0;
+        this.height = 0;
+        unsafe { sg_selection_draw(this.pointer, 0, 0, 0, 0); };
+      }
+      if ((event == 2 or event == 3) and this.dragging) {
+        px = px < 0 ? 0 : px > this.screen_width ? this.screen_width : px;
+        py = py < 0 ? 0 : py > this.screen_height ? this.screen_height : py;
+        this.x = px < this.start_x ? px : this.start_x;
+        this.y = py < this.start_y ? py : this.start_y;
+        this.width = px > this.start_x ? px - this.start_x : this.start_x - px;
+        this.height = py > this.start_y ? py - this.start_y : this.start_y - py;
+        unsafe { sg_selection_draw(this.pointer, this.x, this.y, this.width, this.height); };
+      }
+      if ((event == 3 or event == 5) and this.width > 0 and this.height > 0) {
+        this.close();
+        return SystemResult.Ok(1);
+      }
+      return SystemResult.Ok(0);
+    }
+  }
+}
