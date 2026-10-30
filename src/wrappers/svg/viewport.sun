@@ -18,7 +18,8 @@ public module svg {
 
     /** Renders live borrowed handles; callers guarantee their native types and lifetimes. */
     public unsafe method render(document: raw_ptr<u8>, cairo: raw_ptr<u8>) bool {
-      if (this.width <= 0.0 or this.height <= 0.0 or this.width > F64_MAX or this.height > F64_MAX or this.width != this.width or this.height != this.height) {
+      if (this.width <= 0.0 or this.height <= 0.0 or this.width > F64_MAX or this.height > F64_MAX or
+        this.width != this.width or this.height != this.height) {
         return false;
       }
       return unsafe { rsvg_handle_render_document(document, cairo, this, null); } != 0;

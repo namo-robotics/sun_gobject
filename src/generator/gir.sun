@@ -8,7 +8,11 @@ public module gir {
   extern "C" function access(path: raw_ptr<u8>, mode: i32) i32;
 
   /** Allocates a GLib checksum string for provenance. */
-  extern "C" function g_compute_checksum_for_string(kind: i32, text: raw_ptr<u8>, length: i64) raw_ptr<u8>;
+  extern "C" function g_compute_checksum_for_string(
+    kind: i32,
+    text: raw_ptr<u8>,
+    length: i64
+  ) raw_ptr<u8>;
 
   /** Releases a GLib-allocated checksum string. */
   extern "C" function g_free(p: raw_ptr<u8>) void;
@@ -120,7 +124,11 @@ public module gir {
   }
 
   /** Maps a verified scalar, enum, or raw pointer ABI; rejects unknown layouts. */
-  public function type_name(repo: const ref Repository, doc: const ref xml.Document, node: i64) String {
+  public function type_name(
+    repo: const ref Repository,
+    doc: const ref xml.Document,
+    node: i64
+  ) String {
     var type_node = child(doc, node, "type");
     if (type_node < 0) {
       type_node = child(doc, node, "array");
@@ -130,22 +138,27 @@ public module gir {
     }
     var ctype = doc.nodes[type_node].attr("c:type");
     var name = doc.nodes[type_node].attr("name");
-    if (ctype.contains("*") or ctype.equals_literal("gpointer") or ctype.equals_literal("gconstpointer")) {
+    if (ctype.contains("*") or ctype.equals_literal("gpointer") or
+      ctype.equals_literal("gconstpointer")) {
       return String("raw_ptr<u8>");
     }
     if (name.equals_literal("none") or ctype.equals_literal("void")) {
       return String("void");
     }
-    if (name.equals_literal("gboolean") or name.equals_literal("gint") or name.equals_literal("gint32")) {
+    if (name.equals_literal("gboolean") or name.equals_literal("gint") or
+      name.equals_literal("gint32")) {
       return String("i32");
     }
-    if (name.equals_literal("guint") or name.equals_literal("guint32") or name.equals_literal("gunichar")) {
+    if (name.equals_literal("guint") or name.equals_literal("guint32") or
+      name.equals_literal("gunichar")) {
       return String("u32");
     }
-    if (name.equals_literal("gint64") or name.equals_literal("glong") or name.equals_literal("gssize")) {
+    if (name.equals_literal("gint64") or name.equals_literal("glong") or
+      name.equals_literal("gssize")) {
       return String("i64");
     }
-    if (name.equals_literal("guint64") or name.equals_literal("gulong") or name.equals_literal("gsize") or name.equals_literal("GType")) {
+    if (name.equals_literal("guint64") or name.equals_literal("gulong") or
+      name.equals_literal("gsize") or name.equals_literal("GType")) {
       return String("u64");
     }
     if (name.equals_literal("gfloat")) {
@@ -166,7 +179,8 @@ public module gir {
     if (name.equals_literal("guint16")) {
       return String("u16");
     }
-    if (name.equals_literal("gpointer") or name.equals_literal("gconstpointer") or name.equals_literal("utf8") or name.equals_literal("filename")) {
+    if (name.equals_literal("gpointer") or name.equals_literal("gconstpointer") or
+      name.equals_literal("utf8") or name.equals_literal("filename")) {
       return String("raw_ptr<u8>");
     }
     // Enums are only accepted when a declaration establishes their ABI category.
@@ -208,7 +222,11 @@ public module gir {
   }
 
   /** Emits a selected extern declaration, rejecting unsupported ABI shapes. */
-  public function declaration(repo: const ref Repository, doc: const ref xml.Document, node: i64) String {
+  public function declaration(
+    repo: const ref Repository,
+    doc: const ref xml.Document,
+    node: i64
+  ) String {
     var symbol = doc.nodes[node].attr("c:identifier");
     var fallible = doc.nodes[node].attr("throws");
     if (fallible.equals_literal("1")) {
@@ -217,7 +235,9 @@ public module gir {
     var result = String("  public extern \"C\" function ");
     result.append(symbol);
     result.append("(");
-    var documentation = String("  // Native ABI; ownership and nullability below are caller contracts.\n");
+    var documentation = String(
+      "  // Native ABI; ownership and nullability below are caller contracts.\n"
+    );
     var parameters = child(doc, node, "parameters");
     var count: i64 = 0;
     if (parameters >= 0) {
@@ -226,7 +246,8 @@ public module gir {
           break;
         }
         if (doc.nodes[i].parent == parameters) {
-          if (doc.nodes[i].name.equals_literal("parameter") == false and doc.nodes[i].name.equals_literal("instance-parameter") == false) {
+          if (doc.nodes[i].name.equals_literal("parameter") == false and
+            doc.nodes[i].name.equals_literal("instance-parameter") == false) {
             die("unsupported parameter construct");
           }
           var label = String("arg");

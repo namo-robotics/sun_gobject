@@ -11,13 +11,38 @@ public module gtk {
   extern "C" function sg_view_value(widget: raw_ptr<u8>, value: i32) void;
 
   /** Clears or appends a select option. */
-  extern "C" function sg_view_options(widget: raw_ptr<u8>, text: raw_ptr<u8>, key: raw_ptr<u8>, clear: i32) void;
+  extern "C" function sg_view_options(
+    widget: raw_ptr<u8>,
+    text: raw_ptr<u8>,
+    key: raw_ptr<u8>,
+    clear: i32
+  ) void;
 
   /** Applies validated common layout properties. */
-  extern "C" function sg_view_properties(widget: raw_ptr<u8>, enabled: i32, visible: i32, margin: i32, width: i32, height: i32, horizontal: i32, vertical: i32, expand_x: i32, expand_y: i32, spacing: i32) void;
+  extern "C" function sg_view_properties(
+    widget: raw_ptr<u8>,
+    enabled: i32,
+    visible: i32,
+    margin: i32,
+    width: i32,
+    height: i32,
+    horizontal: i32,
+    vertical: i32,
+    expand_x: i32,
+    expand_y: i32,
+    spacing: i32
+  ) void;
 
   /** Validates and performs child insertion or reordering. */
-  extern "C" function sg_view_place(parent: raw_ptr<u8>, child: raw_ptr<u8>, previous: raw_ptr<u8>, row: i32, column: i32, row_span: i32, column_span: i32) i32;
+  extern "C" function sg_view_place(
+    parent: raw_ptr<u8>,
+    child: raw_ptr<u8>,
+    previous: raw_ptr<u8>,
+    row: i32,
+    column: i32,
+    row_span: i32,
+    column_span: i32
+  ) i32;
 
   /** Detaches a widget from its supported parent. */
   extern "C" function sg_view_remove(child: raw_ptr<u8>) void;
@@ -35,7 +60,13 @@ public module gtk {
   extern "C" function sg_view_style(widget: raw_ptr<u8>, css: raw_ptr<u8>) i32;
 
   /** Clears or appends a native grid sizing rule. */
-  extern "C" function sg_view_track(widget: raw_ptr<u8>, horizontal: i32, kind: i32, value: i32, clear: i32) i32;
+  extern "C" function sg_view_track(
+    widget: raw_ptr<u8>,
+    horizontal: i32,
+    kind: i32,
+    value: i32,
+    clear: i32
+  ) i32;
 
   /** Emits a native edit using the normal GTK property setter. */
   extern "C" function sg_view_edit(widget: raw_ptr<u8>, text: raw_ptr<u8>, value: i32) void;
@@ -48,7 +79,14 @@ public module gtk {
 public module gtk {
 
   /** Applies a validated local source and microsecond selection without emitting edits. */
-  extern "C" function sg_media_set(widget: raw_ptr<u8>, path: raw_ptr<u8>, duration: i64, start: i64, end: i64, position: i64) void;
+  extern "C" function sg_media_set(
+    widget: raw_ptr<u8>,
+    path: raw_ptr<u8>,
+    duration: i64,
+    start: i64,
+    end: i64,
+    position: i64
+  ) void;
 
   /** Borrows the private native edit emitter retained by the event subscription. */
   extern "C" function sg_media_events(widget: raw_ptr<u8>) raw_ptr<u8>;

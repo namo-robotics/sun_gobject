@@ -114,10 +114,22 @@ public module gobject {
   public module signals {
 
     /** Connects a void signal with no arguments, taking ownership of userdata cleanup. */
-    public extern "C" function sg_connect_void(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
+    public extern "C" function sg_connect_void(
+      object: raw_ptr<u8>,
+      signal: raw_ptr<u8>,
+      callback: function (raw_ptr<u8>, raw_ptr<u8>) void,
+      userdata: raw_ptr<u8>,
+      destroy: function (raw_ptr<u8>) void
+    ) u64;
 
     /** Connects a property notification and releases userdata exactly once. */
-    public extern "C" function sg_connect_notify(object: raw_ptr<u8>, signal: raw_ptr<u8>, callback: function (raw_ptr<u8>, raw_ptr<u8>) void, userdata: raw_ptr<u8>, destroy: function (raw_ptr<u8>) void) u64;
+    public extern "C" function sg_connect_notify(
+      object: raw_ptr<u8>,
+      signal: raw_ptr<u8>,
+      callback: function (raw_ptr<u8>, raw_ptr<u8>) void,
+      userdata: raw_ptr<u8>,
+      destroy: function (raw_ptr<u8>) void
+    ) u64;
 
     /** Keeps the emitter alive, disconnecting before releasing it. Callbacks
          * must be module functions; userdata must outlive the connection. */

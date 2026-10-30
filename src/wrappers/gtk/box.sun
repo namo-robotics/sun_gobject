@@ -16,7 +16,9 @@ public module gtk {
       if (unsafe { gtk_init_check(); } == 0) {
         return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
       }
-      this.pointer = unsafe { raw.gtk_box_new(orientation == Orientation.Vertical ? 1 : 0, spacing); };
+      this.pointer = unsafe {
+        raw.gtk_box_new(orientation == Orientation.Vertical ? 1 : 0, spacing);
+      };
       unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
     }
 
@@ -75,7 +77,8 @@ public module gtk {
       if (parent != null and parent != this.pointer) {
         return SystemResult.Error(Error(1, "Button belongs to another parent"));
       }
-      if (sibling != null and (sibling == child or unsafe { gtk_widget_get_parent(sibling); } != this.pointer)) {
+      if (sibling != null and
+        (sibling == child or unsafe { gtk_widget_get_parent(sibling); } != this.pointer)) {
         return SystemResult.Error(Error(1, "Sibling must be another child of this box"));
       }
       if (parent == null) {
@@ -112,14 +115,16 @@ public module gtk {
     public const method is_first(button: ref Button) bool {
       require_thread();
       var child = unsafe { button.raw_handle(); };
-      return unsafe { gtk_widget_get_parent(child); } == this.pointer and unsafe { raw.gtk_widget_get_prev_sibling(child); } == null;
+      return unsafe { gtk_widget_get_parent(child); } == this.pointer and
+        unsafe { raw.gtk_widget_get_prev_sibling(child); } == null;
     }
 
     /** Reports whether two buttons are consecutive children of this box. */
     public const method follows(button: ref Button, previous: ref Button) bool {
       require_thread();
       var child = unsafe { button.raw_handle(); };
-      return unsafe { gtk_widget_get_parent(child); } == this.pointer and unsafe { raw.gtk_widget_get_prev_sibling(child); } == unsafe { previous.raw_handle(); };
+      return unsafe { gtk_widget_get_parent(child); } == this.pointer and
+        unsafe { raw.gtk_widget_get_prev_sibling(child); } == unsafe { previous.raw_handle(); };
     }
   }
 }

@@ -66,13 +66,17 @@ module demo {
   }
 
   /** Changes the label from a Sun callback after native dispatch has returned. */
-  function clicked(state: ref AppState, context: ref gtk.EventContext<AppState>) SystemResult<void> {
+  function clicked(
+    state: ref AppState,
+    context: ref gtk.EventContext<AppState>
+  ) SystemResult<void> {
     var greeting = String("Hello from Sun!");
     try state.button.set_label(greeting);
     state.clicked = true;
     if (state.automated) {
       var copied = state.button.label();
-      if (copied.equals(greeting) == false or state.button.take_click() == false or state.button.take_click()) {
+      if (copied.equals(greeting) == false or state.button.take_click() == false or
+        state.button.take_click()) {
         return SystemResult.Error(Error(1, "Button label or independent polling event differs"));
       }
       // Cancel this handler before closing, then emit a queued click that must be skipped.
@@ -141,4 +145,10 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon", "sun_gobject.moon", "sun_gtk.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_gobject.moon",
+    "sun_gtk.moon"
+  ]
+}

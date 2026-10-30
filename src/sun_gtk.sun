@@ -30,5 +30,8 @@ manifest {
     "wrappers/svg/viewport.sun",
     "wrappers/svg/document.sun"
   ]
-  libraries: ["sun_gobject.moon", "stdlib.moon"]
+  libraries: [
+    "sun_gobject.moon",
+    "stdlib.moon"
+  ]
 }

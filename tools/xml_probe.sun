@@ -10,4 +10,8 @@ function main() i32 {
     XmlResult.Error(_) => 1
   };
 }
-manifest { libraries: ["stdlib.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ]
+}

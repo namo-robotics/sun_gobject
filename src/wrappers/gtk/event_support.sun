@@ -43,7 +43,12 @@ public module gtk {
   extern "C" function sg_loop_iterate(loop: raw_ptr<u8>, block: i32) void;
 
   /** Creates a native signal adapter retaining its emitter. */
-  extern "C" function sg_loop_connect(loop: raw_ptr<u8>, id: u64, kind: u32, emitter: raw_ptr<u8>) raw_ptr<u8>;
+  extern "C" function sg_loop_connect(
+    loop: raw_ptr<u8>,
+    id: u64,
+    kind: u32,
+    emitter: raw_ptr<u8>
+  ) raw_ptr<u8>;
 
   /** Creates a native one-shot timer. */
   extern "C" function sg_loop_timer(loop: raw_ptr<u8>, id: u64, delay: u32) raw_ptr<u8>;

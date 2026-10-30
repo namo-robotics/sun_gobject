@@ -38,10 +38,18 @@ public module gtk {
     }
 
     /** Applies a media source and trim range in microseconds, rejecting invalid bounds. */
-    public method media(path: ref String, duration: i64, start: i64, end: i64, position: i64) SystemResult<void> {
+    public method media(
+      path: ref String,
+      duration: i64,
+      start: i64,
+      end: i64,
+      position: i64
+    ) SystemResult<void> {
       require_thread();
       try validate(path);
-      if (this.kind != 10 or duration < 0 or duration > 1000000000000000 or start < 0 or end < start or end > duration or position < 0 or position > duration or (duration > 0 and start == end)) {
+      if (this.kind != 10 or duration < 0 or duration > 1000000000000000 or start < 0 or
+        end < start or end > duration or position < 0 or position > duration or
+        (duration > 0 and start == end)) {
         return SystemResult.Error(Error(1, "Invalid media range"));
       }
       unsafe { sg_media_set(this.pointer, path.c_str(), duration, start, end, position); };
@@ -51,7 +59,8 @@ public module gtk {
     /** Drives a real native drag for automated interaction, rejecting nonfinite coordinates. */
     public method drag_media(start: f64, end: f64) SystemResult<void> {
       require_thread();
-      if (this.kind != 10 or start != start or end != end or start < 0.0 or start > 1.0 or end < 0.0 or end > 1.0) {
+      if (this.kind != 10 or start != start or end != end or start < 0.0 or start > 1.0 or
+        end < 0.0 or end > 1.0) {
         return SystemResult.Error(Error(1, "Invalid media drag"));
       }
       unsafe { sg_media_drag(this.pointer, start, end); };
@@ -122,28 +131,79 @@ public module gtk {
     }
 
     /** Applies common properties after rejecting invalid dimensions and alignments. */
-    public method properties(enabled: bool, visible: bool, margin: i32, width: i32, height: i32, horizontal: i32, vertical: i32, expand_x: bool, expand_y: bool, spacing: i32) SystemResult<void> {
+    public method properties(
+      enabled: bool,
+      visible: bool,
+      margin: i32,
+      width: i32,
+      height: i32,
+      horizontal: i32,
+      vertical: i32,
+      expand_x: bool,
+      expand_y: bool,
+      spacing: i32
+    ) SystemResult<void> {
       require_thread();
-      if (margin < 0 or width < -1 or height < -1 or horizontal < 0 or horizontal > 3 or vertical < 0 or vertical > 3 or spacing < 0) {
+      if (margin < 0 or width < -1 or height < -1 or horizontal < 0 or horizontal > 3 or
+        vertical < 0 or vertical > 3 or spacing < 0) {
         return SystemResult.Error(Error(1, "Invalid widget layout"));
       }
-      unsafe { sg_view_properties(this.pointer, enabled ? 1 : 0, visible ? 1 : 0, margin, width, height, horizontal, vertical, expand_x ? 1 : 0, expand_y ? 1 : 0, spacing); };
+      unsafe {
+        sg_view_properties(
+          this.pointer,
+          enabled ? 1 : 0,
+          visible ? 1 : 0,
+          margin,
+          width,
+          height,
+          horizontal,
+          vertical,
+          expand_x ? 1 : 0,
+          expand_y ? 1 : 0,
+          spacing
+        );
+      };
       return SystemResult.Ok;
     }
 
     /** Places a child first after validating parenting and grid coordinates. */
-    public method place_first(child: ref Widget, row: i32, column: i32, row_span: i32, column_span: i32) SystemResult<void> {
+    public method place_first(
+      child: ref Widget,
+      row: i32,
+      column: i32,
+      row_span: i32,
+      column_span: i32
+    ) SystemResult<void> {
       require_thread();
-      if (unsafe { sg_view_place(this.pointer, child.pointer, null, row, column, row_span, column_span); } == 0) {
+      if (unsafe {
+        sg_view_place(this.pointer, child.pointer, null, row, column, row_span, column_span);
+      } == 0) {
         return SystemResult.Error(Error(1, "Invalid widget parenting"));
       }
       return SystemResult.Ok;
     }
 
     /** Reorders or inserts a child after a sibling, preserving existing native focus. */
-    public method place_after(child: ref Widget, previous: ref Widget, row: i32, column: i32, row_span: i32, column_span: i32) SystemResult<void> {
+    public method place_after(
+      child: ref Widget,
+      previous: ref Widget,
+      row: i32,
+      column: i32,
+      row_span: i32,
+      column_span: i32
+    ) SystemResult<void> {
       require_thread();
-      if (unsafe { sg_view_place(this.pointer, child.pointer, previous.pointer, row, column, row_span, column_span); } == 0) {
+      if (unsafe {
+        sg_view_place(
+          this.pointer,
+          child.pointer,
+          previous.pointer,
+          row,
+          column,
+          row_span,
+          column_span
+        );
+      } == 0) {
         return SystemResult.Error(Error(1, "Invalid widget parenting"));
       }
       return SystemResult.Ok;
@@ -168,7 +228,8 @@ public module gtk {
     /** Clears or appends a checked grid track without replacing its children. */
     public method track(horizontal: bool, kind: i32, value: i32, clear: bool) SystemResult<void> {
       require_thread();
-      if (unsafe { sg_view_track(this.pointer, horizontal ? 1 : 0, kind, value, clear ? 1 : 0); } == 0) {
+      if (unsafe { sg_view_track(this.pointer, horizontal ? 1 : 0, kind, value, clear ? 1 : 0); } ==
+        0) {
         return SystemResult.Error(Error(1, "Invalid grid track"));
       }
       return SystemResult.Ok;
@@ -214,13 +275,16 @@ public module gtk {
     /** Checks whether this is the first child of its parent. */
     public const method first() bool {
       require_thread();
-      return unsafe { gtk_widget_get_parent(this.pointer); } != null and unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == null;
+      return unsafe { gtk_widget_get_parent(this.pointer); } != null and
+        unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == null;
     }
 
     /** Checks native adjacency without exposing handles. */
     public const method follows(previous: const ref Widget) bool {
       require_thread();
-      return unsafe { gtk_widget_get_parent(this.pointer); } == unsafe { gtk_widget_get_parent(previous.pointer); } and unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == previous.pointer;
+      return unsafe { gtk_widget_get_parent(this.pointer); } ==
+        unsafe { gtk_widget_get_parent(previous.pointer); } and
+        unsafe { raw.gtk_widget_get_prev_sibling(this.pointer); } == previous.pointer;
     }
   }
 }

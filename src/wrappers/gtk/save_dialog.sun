@@ -19,7 +19,11 @@ public module gtk {
     }
 
     /** Presents one save request; invalid text, a closed parent, or an active request returns an error. */
-    public method show(parent: ref Window, title: ref String, filename: ref String) SystemResult<void> {
+    public method show(
+      parent: ref Window,
+      title: ref String,
+      filename: ref String
+    ) SystemResult<void> {
       require_thread();
       try validate(title);
       try validate(filename);
@@ -32,7 +36,13 @@ public module gtk {
       unsafe {
         this.parent = parent.raw_handle();
         gobject.raw.g_object_ref(this.parent);
-        this.pointer = gtk_file_chooser_native_new(title.c_str(), this.parent, 1, "Save", "Cancel");
+        this.pointer = gtk_file_chooser_native_new(
+          title.c_str(),
+          this.parent,
+          1,
+          "Save",
+          "Cancel"
+        );
         gtk_file_chooser_set_current_name(this.pointer, filename.c_str());
         connect_save_response(this.pointer, "response", save_response, null, null, 0);
         gtk_native_dialog_set_modal(this.pointer, 1);
@@ -84,7 +94,10 @@ public module gtk {
     public method cancel() void {
       require_thread();
       if (this.pointer != null) {
-        unsafe { gtk_native_dialog_destroy(this.pointer); gobject.raw.g_object_unref(this.pointer); };
+        unsafe {
+          gtk_native_dialog_destroy(this.pointer);
+          gobject.raw.g_object_unref(this.pointer);
+        };
         this.pointer = null;
       }
       if (this.parent != null) {

@@ -93,7 +93,11 @@ module event_checks {
     state.button.click();
     try loop.run(state);
     try expect(state.trace.equals_literal("ACCD"), "FIFO handler order or cancellation differs");
-    try expect(state.button.take_click() and state.button.take_click() and state.button.take_click() == false, "Polling stole registered events");
+    try expect(
+      state.button.take_click() and state.button.take_click() and
+        state.button.take_click() == false,
+      "Polling stole registered events"
+    );
     try loop.disconnect(a);
     try loop.disconnect(d);
     match loop.after(0, unexpected) {
@@ -166,7 +170,10 @@ module event_checks {
       std.time.sleep(std.time.create_duration_millis(35));
       state.mark = std.time.now();
     } else {
-      try expect(state.mark.elapsed().as_millis() >= 10, "Repeating timer caught up instead of delaying");
+      try expect(
+        state.mark.elapsed().as_millis() >= 10,
+        "Repeating timer caught up instead of delaying"
+      );
       var own = context.registration();
       try context.disconnect(own);
       var stop = try context.after(30, stop_timer);
@@ -217,7 +224,10 @@ module event_checks {
     var later = try loop.on_clicked(state.button, unexpected);
     state.button.click();
     try loop.run(state);
-    try expect(state.count == 1 and state.window.is_open(), "Quit did not stop after current callback");
+    try expect(
+      state.count == 1 and state.window.is_open(),
+      "Quit did not stop after current callback"
+    );
     state.button.click();
     var id2 = String("org.sunlang.Events.Failure");
     var app2 = try gtk.Application(id2);
@@ -248,7 +258,10 @@ module event_checks {
   }
 
   /** Closes the replacement after its close notification has been registered. */
-  function close_replacement(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function close_replacement(
+    state: ref State,
+    context: ref gtk.EventContext<State>
+  ) SystemResult<void> {
     match state.replacement {
       Option.Some(window) => {
         window.close();
@@ -261,7 +274,10 @@ module event_checks {
   }
 
   /** Records the final close; pending timers must not keep the loop alive. */
-  function replacement_closed(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function replacement_closed(
+    state: ref State,
+    context: ref gtk.EventContext<State>
+  ) SystemResult<void> {
     state.count += 1;
     var unused = try context.every(60000, unexpected);
     return SystemResult.Ok;
@@ -372,7 +388,10 @@ module event_checks {
     var timer = try loop.after(0, serviced);
     state.button.click();
     try loop.run(state);
-    try expect(state.inside and state.count >= 64 and state.count <= 128, "Dispatch batch policy differs");
+    try expect(
+      state.inside and state.count >= 64 and state.count <= 128,
+      "Dispatch batch policy differs"
+    );
     return SystemResult.Ok;
   }
 
@@ -436,7 +455,10 @@ module event_checks {
         var id = String("org.sunlang.Events.Cleanup");
         id.append(mode);
         var app = try gtk.Application(id);
-        try expect(unsafe { sg_test_entry_selection(); } != 0, "Unchanged text reset cursor or selection");
+        try expect(
+          unsafe { sg_test_entry_selection(); } != 0,
+          "Unchanged text reset cursor or selection"
+        );
         unsafe { sg_test_hold_application(app.raw_handle()); };
         var state = try State(app);
         unsafe {
@@ -463,18 +485,31 @@ module event_checks {
           state.button.click();
         }
       }
-      try expect(unsafe { sg_test_watched_objects(); } == 0, "Loop cleanup retained native widgets");
-      try expect(unsafe { sg_test_application_balanced(); } != 0, "Loop cleanup retained its application reference");
+      try expect(
+        unsafe { sg_test_watched_objects(); } == 0,
+        "Loop cleanup retained native widgets"
+      );
+      try expect(
+        unsafe { sg_test_application_balanced(); } != 0,
+        "Loop cleanup retained its application reference"
+      );
     }
     return SystemResult.Ok;
   }
 
   /** Checks one FIFO delivery without exposing native pointers or application state. */
-  function delivery(queue: ref gtk.EventQueue, expected: const ref gtk.RegistrationId, kind: gtk.EventKind) SystemResult<void> {
+  function delivery(
+    queue: ref gtk.EventQueue,
+    expected: const ref gtk.RegistrationId,
+    kind: gtk.EventKind
+  ) SystemResult<void> {
     match queue.next() {
       Option.Some(event) => {
         var id = event.registration();
-        try expect(id.equals(expected) and event.kind() == kind, "Native queue delivery order or kind differs");
+        try expect(
+          id.equals(expected) and event.kind() == kind,
+          "Native queue delivery order or kind differs"
+        );
       },
       Option.None => {
         return SystemResult.Error(Error(1, "Native queue lost a delivery"));
@@ -498,7 +533,10 @@ module event_checks {
         try window.set_box(box);
         try box.place_first(first);
         try box.place_after(second, first);
-        try expect(box.is_first(first) and box.follows(second, first), "Checked box placement differs");
+        try expect(
+          box.is_first(first) and box.follows(second, first),
+          "Checked box placement differs"
+        );
         match window.set_child(second) {
           SystemResult.Ok => {
             return SystemResult.Error(Error(1, "Parented button accepted by window"));
@@ -576,7 +614,10 @@ module event_checks {
           match queue.next() {
             Option.Some(event) => {
               var token = event.registration();
-              try expect(token.equals(timer) and event.kind() == gtk.EventKind.Timer, "Windowless timer was lost");
+              try expect(
+                token.equals(timer) and event.kind() == gtk.EventKind.Timer,
+                "Windowless timer was lost"
+              );
               received = true;
             },
             Option.None => {}
@@ -590,18 +631,27 @@ module event_checks {
         second.click();
         var pending = try queue.after(60000);
       }
-      try expect(unsafe { sg_test_watched_objects(); } == 0, "Native queue retained widgets after destruction");
+      try expect(
+        unsafe { sg_test_watched_objects(); } == 0,
+        "Native queue retained widgets after destruction"
+      );
       // Destruction must release exclusive dispatch for the next consumer.
       if (true) {
         var next = try gtk.EventQueue(app);
       }
     }
-    try expect(unsafe { sg_test_application_balanced(); } != 0, "Native queue retained its application");
+    try expect(
+      unsafe { sg_test_application_balanced(); } != 0,
+      "Native queue retained its application"
+    );
     return SystemResult.Ok;
   }
 
   /** Supplies a callback type only for the foreign-identity rejection check. */
-  function unused_queue_callback(state: ref i32, context: ref gtk.EventContext<i32>) SystemResult<void> {
+  function unused_queue_callback(
+    state: ref i32,
+    context: ref gtk.EventContext<i32>
+  ) SystemResult<void> {
     return SystemResult.Ok;
   }
 
@@ -666,4 +716,10 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon", "sun_gobject.moon", "sun_gtk.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_gobject.moon",
+    "sun_gtk.moon"
+  ]
+}

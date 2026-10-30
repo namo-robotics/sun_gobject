@@ -59,28 +59,40 @@ public module gtk {
     }
 
     /** Registers a click callback with independent native emitter ownership. */
-    public method on_clicked(button: ref Button, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+    public method on_clicked(
+      button: ref Button,
+      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+    ) SystemResult<RegistrationId> {
       var number = try this.core.reserve();
       try this.add(Handler<State>(number, 1, 0, unsafe { button.raw_handle(); }, callback));
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
     /** Registers a notification for a window belonging to this application. */
-    public method on_closed(window: ref Window, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+    public method on_closed(
+      window: ref Window,
+      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+    ) SystemResult<RegistrationId> {
       var number = try this.core.reserve();
       try this.add(Handler<State>(number, 2, 0, unsafe { window.raw_handle(); }, callback));
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
     /** Registers a one-shot timeout; zero means a future dispatch turn. */
-    public method after(delay_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+    public method after(
+      delay_ms: u32,
+      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+    ) SystemResult<RegistrationId> {
       var number = try this.core.reserve();
       try this.add(Handler<State>(number, 3, delay_ms, null, callback));
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
     /** Registers a timer with a positive delay after each callback completes. */
-    public method every(interval_ms: u32, callback: function (ref State, ref EventContext<State>) SystemResult<void>) SystemResult<RegistrationId> {
+    public method every(
+      interval_ms: u32,
+      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+    ) SystemResult<RegistrationId> {
       require_thread();
       if (interval_ms == 0) {
         return SystemResult.Error(Error(1, "Repeating timer interval must be positive"));
@@ -175,7 +187,9 @@ public module gtk {
     public method run(state: ref State) SystemResult<void> {
       require_thread();
       if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
-        return SystemResult.Error(Error(1, "Event loop is finished or dispatch is already active"));
+        return SystemResult.Error(
+          Error(1, "Event loop is finished or dispatch is already active")
+        );
       }
       var result = this.dispatch_loop(state);
       this.finish();

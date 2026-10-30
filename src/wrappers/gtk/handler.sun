@@ -13,7 +13,13 @@ public module gtk {
     var callback: function (ref State, ref EventContext<State>) SystemResult<void>;
 
     /** Retains an emitter until this handler is installed or discarded. */
-    init(number: u64, kind: u32, delay: u32, emitter: raw_ptr<u8>, callback: function (ref State, ref EventContext<State>) SystemResult<void>) {
+    init(
+      number: u64,
+      kind: u32,
+      delay: u32,
+      emitter: raw_ptr<u8>,
+      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+    ) {
       this.number = number;
       this.kind = kind;
       this.delay = delay;
@@ -38,7 +44,9 @@ public module gtk {
     /** Installs the staged registration after the current callback has returned. */
     method install(core: ref LoopCore) SystemResult<void> {
       if (this.kind < 3) {
-        this.source = unsafe { sg_loop_connect(core.pointer, this.number, this.kind, this.emitter); };
+        this.source = unsafe {
+          sg_loop_connect(core.pointer, this.number, this.kind, this.emitter);
+        };
       } else {
         this.source = unsafe { sg_loop_timer(core.pointer, this.number, this.delay); };
       }

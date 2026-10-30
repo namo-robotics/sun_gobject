@@ -5,7 +5,10 @@ module generator_tests {
 
   /** Generates fixtures, preferring any locally modified input files. */
   function generate(fixture: ref checks.Fixture) checks.Result<std.process.Output> {
-    return checks.command(fixture, "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun-gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture");
+    return checks.command(
+      fixture,
+      "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun-gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture"
+    );
   }
 
   /** Reads an input fixture from the repository. */
@@ -17,7 +20,11 @@ module generator_tests {
   }
 
   /** Checks XML acceptance and numeric line and column diagnostics on rejection. */
-  function xml(fixture: ref checks.Fixture, content: ref String, accepted: bool) checks.Result<void> {
+  function xml(
+    fixture: ref checks.Fixture,
+    content: ref String,
+    accepted: bool
+  ) checks.Result<void> {
     var path = fixture.file("input.xml");
     try checks.write(path, content);
     var output = try checks.command(fixture, "exec \"$2/sun-gir\" --check-xml \"$1/input.xml\"");
@@ -103,7 +110,10 @@ module generator_tests {
     var source = try checks.read(path);
     var golden = try input("tiny.expected.sun");
     try std.test.assert_eq(source, golden);
-    var compiled = try checks.command(fixture, "\"$3\" --emit-moon -o \"$1/tiny.moon\" \"$1/tiny.sun\"");
+    var compiled = try checks.command(
+      fixture,
+      "\"$3\" --emit-moon -o \"$1/tiny.moon\" \"$1/tiny.sun\""
+    );
     try checks.success(compiled);
     var snapshot_allocator = make_heap_allocator();
     var entries = try std.test.expect_system(std.io.read_dir(snapshot_allocator, fixture.path));
@@ -141,7 +151,10 @@ module generator_tests {
     try std.test.assert(parent_found, "inheritance metadata retained");
     var provenance_path = fixture.file("provenance.json");
     var provenance = try std.test.expect_json(parse_json(a, try checks.read(provenance_path)));
-    try std.test.assert_eq((try (try (try provenance.get("gir")).get("Tiny-1.0")).as_string()).length(), 64);
+    try std.test.assert_eq(
+      (try (try (try provenance.get("gir")).get("Tiny-1.0")).as_string()).length(),
+      64
+    );
     var coverage_path = fixture.file("coverage.tsv");
     var coverage = try checks.read(coverage_path);
     try std.test.assert(coverage.contains("tiny_unsupported\tunselected"));
@@ -169,9 +182,15 @@ module generator_tests {
   test_function recursive_dependency() checks.Result<void> {
     var fixture = try checks.Fixture();
     var source = try input("Tiny-1.0.gir");
-    source.replace("<namespace name=\"Tiny\"", "<include name=\"TinyDep\" version=\"1.0\"/><namespace name=\"Tiny\"");
+    source.replace(
+      "<namespace name=\"Tiny\"",
+      "<include name=\"TinyDep\" version=\"1.0\"/><namespace name=\"Tiny\""
+    );
     source.replace("name=\"gint\" c:type=\"gint\"", "name=\"TinyDep.Flags\" c:type=\"TinyFlags\"");
-    source.replace("name=\"value\" transfer-ownership=\"none\"", "name=\"value\" transfer-ownership=\"full\" nullable=\"1\" scope=\"notified\" closure=\"1\" destroy=\"2\"");
+    source.replace(
+      "name=\"value\" transfer-ownership=\"none\"",
+      "name=\"value\" transfer-ownership=\"full\" nullable=\"1\" scope=\"notified\" closure=\"1\" destroy=\"2\""
+    );
     var gir = fixture.file("Tiny-1.0.gir");
     try checks.write(gir, source);
     var result = try generate(fixture);
@@ -193,7 +212,9 @@ module generator_tests {
       }
       if (parameter and found == false) {
         var attrs: ref Json = try node.get("attributes");
-        try std.test.assert((try (try attrs.get("transfer-ownership")).as_string()).equals_literal("full"));
+        try std.test.assert(
+          (try (try attrs.get("transfer-ownership")).as_string()).equals_literal("full")
+        );
         try std.test.assert((try (try attrs.get("nullable")).as_string()).equals_literal("1"));
         try std.test.assert((try (try attrs.get("scope")).as_string()).equals_literal("notified"));
         try std.test.assert((try (try attrs.get("closure")).as_string()).equals_literal("1"));

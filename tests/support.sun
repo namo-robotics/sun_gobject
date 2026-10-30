@@ -46,7 +46,10 @@ module checks {
   }
 
   /** Runs a bounded shell command with fixture, build, compiler, and root arguments. */
-  public function command(fixture: ref Fixture, script: static_ptr<u8>) checks.Result<std.process.Output> {
+  public function command(
+    fixture: ref Fixture,
+    script: static_ptr<u8>
+  ) checks.Result<std.process.Output> {
     var a = make_heap_allocator();
     var command = std.process.Command(a, "timeout");
     command.add_arg("30s");

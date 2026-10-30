@@ -34,7 +34,11 @@ public module gtk {
   extern "C" function g_application_id_is_valid(id: raw_ptr<u8>) i32;
 
   /** Registers an application and runs its startup handlers. */
-  extern "C" function g_application_register(app: raw_ptr<u8>, cancellable: raw_ptr<u8>, error: raw_ptr<u8>) i32;
+  extern "C" function g_application_register(
+    app: raw_ptr<u8>,
+    cancellable: raw_ptr<u8>,
+    error: raw_ptr<u8>
+  ) i32;
 
   /** Reads a widget's parent without transferring ownership. */
   extern "C" function gtk_widget_get_parent(widget: raw_ptr<u8>) raw_ptr<u8>;

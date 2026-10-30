@@ -4,7 +4,14 @@ using std;
 public module gtk {
 
   /** Creates the native widget and retains the supplied callback target. */
-  extern "C" function sg_gl_area_new(data: raw_ptr<u8>, render: function (raw_ptr<u8>, i32, i32) i32, reset: function (raw_ptr<u8>, i32) void, retain: function (raw_ptr<u8>) void, release: function (raw_ptr<u8>) void, input: function (raw_ptr<u8>, i32, i32, f64, f64) void) raw_ptr<u8>;
+  extern "C" function sg_gl_area_new(
+    data: raw_ptr<u8>,
+    render: function (raw_ptr<u8>, i32, i32) i32,
+    reset: function (raw_ptr<u8>, i32) void,
+    retain: function (raw_ptr<u8>) void,
+    release: function (raw_ptr<u8>) void,
+    input: function (raw_ptr<u8>, i32, i32, f64, f64) void
+  ) raw_ptr<u8>;
 
   /** Requests a frame at the GTK drawing boundary. */
   extern "C" function sg_gl_area_queue(area: raw_ptr<u8>) void;
@@ -26,7 +33,14 @@ public module gtk {
     var pointer: raw_ptr<u8> = null;
 
     /** Retains an external native target; callbacks must remain valid until final release. */
-    init(data: raw_ptr<u8>, render: function (raw_ptr<u8>, i32, i32) i32, reset: function (raw_ptr<u8>, i32) void, retain: function (raw_ptr<u8>) void, release: function (raw_ptr<u8>) void, input: function (raw_ptr<u8>, i32, i32, f64, f64) void) SystemResult<void> {
+    init(
+      data: raw_ptr<u8>,
+      render: function (raw_ptr<u8>, i32, i32) i32,
+      reset: function (raw_ptr<u8>, i32) void,
+      retain: function (raw_ptr<u8>) void,
+      release: function (raw_ptr<u8>) void,
+      input: function (raw_ptr<u8>, i32, i32, f64, f64) void
+    ) SystemResult<void> {
       require_thread();
       if (unsafe { gtk_init_check(); } == 0) {
         return SystemResult.Error(Error(1, "Cannot initialize GTK"));

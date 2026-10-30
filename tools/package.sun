@@ -41,14 +41,24 @@ module release_package {
     try run(clear);
     try install(String("build/sun_gobject.moon"), `${root}/usr/lib/sun/sun_gobject.moon`, false);
     try install(String("build/sun_gtk.moon"), `${root}/usr/lib/sun/sun_gtk.moon`, false);
-    try install(String("build/native/libsun_gobject_native.a"), `${root}/usr/lib/sun/native/libsun_gobject_native.a`, false);
+    try install(
+      String("build/native/libsun_gobject_native.a"),
+      `${root}/usr/lib/sun/native/libsun_gobject_native.a`,
+      false
+    );
     try install(String("LICENSE"), `${root}/usr/share/doc/sun-gobject/copyright`, false);
-    try install(String("build/sun-version.txt"), `${root}/usr/share/doc/sun-gobject/sun-version.txt`, false);
+    try install(
+      String("build/sun-version.txt"),
+      `${root}/usr/share/doc/sun-gobject/sun-version.txt`,
+      false
+    );
     var mkdir = std.process.Command(a, "mkdir");
     mkdir.add_arg("-p");
     mkdir.add_arg(`${root}/DEBIAN`);
     try run(mkdir);
-    var control = String("Package: sun-gobject\nVersion: 0.dev\nArchitecture: amd64\nMaintainer: David Brown <davidwbrwn@gmail.com>\nDepends: sun, libgtk-4-dev, librsvg2-dev\nSection: libdevel\nPriority: optional\nDescription: Sun development bundles and tools\n Built for Ubuntu 26.04 with the recorded Sun compiler.\n");
+    var control = String(
+      "Package: sun-gobject\nVersion: 0.dev\nArchitecture: amd64\nMaintainer: David Brown <davidwbrwn@gmail.com>\nDepends: sun, libgtk-4-dev, librsvg2-dev\nSection: libdevel\nPriority: optional\nDescription: Sun development bundles and tools\n Built for Ubuntu 26.04 with the recorded Sun compiler.\n"
+    );
     var path = `${root}/DEBIAN/control`;
     try std.io.write_string(path, control);
     var archive = std.process.Command(a, "dpkg-deb");
@@ -70,4 +80,8 @@ function main() i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ]
+}

@@ -58,7 +58,9 @@ module runtime_tests {
     var empty = gobject.OwnedObject(null);
     var p = unsafe { gio.raw.g_simple_action_new("test", null); };
     var action = gobject.OwnedObject(p);
-    var id = unsafe { gobject.signals.sg_connect_notify(p, "notify::enabled", notified, p, cleanup); };
+    var id = unsafe {
+      gobject.signals.sg_connect_notify(p, "notify::enabled", notified, p, cleanup);
+    };
     if (id == 0) {
       try std.test.fail("Runtime acceptance check 5 failed");
     }
@@ -88,7 +90,15 @@ module runtime_tests {
     }
     if (true) {
       var other = gobject.OwnedObject(unsafe { gio.raw.g_simple_action_new("other", null); });
-      unsafe { gobject.signals.sg_connect_notify(other.borrow(), "notify::enabled", notified, other.borrow(), cleanup); };
+      unsafe {
+        gobject.signals.sg_connect_notify(
+          other.borrow(),
+          "notify::enabled",
+          notified,
+          other.borrow(),
+          cleanup
+        );
+      };
     }
     if (cleanups != 3) {
       try std.test.fail("Runtime acceptance check 11 failed");

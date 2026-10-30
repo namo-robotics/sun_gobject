@@ -23,7 +23,8 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
     app.iterate(false);
     unsafe { g_usleep(10000); };
   }
-  if (left.extent(true) <= 0 or right.extent(true) < left.extent(true) * 2 - 2 or right.extent(true) > left.extent(true) * 2 + 2) {
+  if (left.extent(true) <= 0 or right.extent(true) < left.extent(true) * 2 - 2 or
+    right.extent(true) > left.extent(true) * 2 + 2) {
     return SystemResult.Error(Error(1, "Weighted tracks did not share remaining space"));
   }
   match grid.place_first(grid, 0, 0, 1, 1) {
@@ -128,7 +129,9 @@ function run() SystemResult<void> {
   };
   // The area must retain its document after the source wrapper leaves scope.
   if (true) {
-    var content = String("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"><circle cx=\"100\" cy=\"50\" r=\"30\"/></svg>");
+    var content = String(
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"><circle cx=\"100\" cy=\"50\" r=\"30\"/></svg>"
+    );
     var document = try svg.Document(content);
     area.set_document(document);
   }
@@ -215,4 +218,10 @@ function main() i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon", "sun_gobject.moon", "sun_gtk.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_gobject.moon",
+    "sun_gtk.moon"
+  ]
+}
