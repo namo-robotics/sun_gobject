@@ -5,13 +5,14 @@
 
 /** Owns native media state; callbacks retain no Sun storage or application references. */
 typedef struct {
-    GtkWidget *root, *video, *timeline, *play, *clock, *notice, *events;
+    GtkWidget *root, *video, *timeline, *transport, *play, *clock, *notice, *events;
     GtkGesture *drag;
     GtkMediaStream *stream;
     char *path;
     gint64 duration, start, end, position, requested;
     double origin;
     int handle;
+    gboolean trim_controls;
     gulong notify;
 } Media;
 
@@ -36,7 +37,7 @@ static void refresh(Media *media) {
     char *current = time_label(media->position), *end = time_label(media->duration);
     char *label = g_strdup_printf("%s  /  %s", current, end);
     gtk_label_set_text(GTK_LABEL(media->clock), label);
-    gtk_button_set_label(GTK_BUTTON(media->play), media->stream && gtk_media_stream_get_playing(media->stream) ? "Pause" : "Play selection");
+    gtk_button_set_label(GTK_BUTTON(media->play), media->stream && gtk_media_stream_get_playing(media->stream) ? "Pause" : (media->trim_controls ? "Play selection" : "Play"));
     gtk_widget_queue_draw(media->timeline);
     g_free(current); g_free(end); g_free(label);
 }
@@ -109,7 +110,7 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
         cairo_text_extents_t extents; cairo_text_extents(cr, text, &extents);
         cairo_move_to(cr, CLAMP(x - extents.width / 2, 4, width - extents.width - 4), 99); cairo_show_text(cr, text); g_free(text);
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; media->trim_controls && i < 2; i++) {
         double x = i == 0 ? left : right;
         cairo_set_source_rgb(cr, .34, .93, .82); cairo_rectangle(cr, x - 7, 23, 14, 54); cairo_fill(cr);
         cairo_set_source_rgb(cr, .035, .12, .14); cairo_set_line_width(cr, 2);
@@ -142,7 +143,7 @@ static void drag_begin(GtkGestureDrag *gesture, double x, double y, gpointer dat
     gtk_widget_grab_focus(media->timeline);
     media->origin = x;
     double left = fabs(x - time_x(media, media->start)), right = fabs(x - time_x(media, media->end));
-    media->handle = MIN(left, right) <= 16 ? (left <= right ? 1 : 2) : 0;
+    media->handle = media->trim_controls && MIN(left, right) <= 16 ? (left <= right ? 1 : 2) : 0;
     edit_at(media, x_time(media, x));
 }
 /** Continues a real drag using offsets from its original timeline coordinate. */
@@ -162,7 +163,7 @@ static gboolean key_pressed(GtkEventControllerKey *controller, guint key, guint 
     Media *media = data;
     if (key == GDK_KEY_space) { toggle_play(NULL, media); return TRUE; }
     if (key != GDK_KEY_Left && key != GDK_KEY_Right) return FALSE;
-    media->handle = modifiers & GDK_SHIFT_MASK ? 1 : (modifiers & GDK_CONTROL_MASK ? 2 : 0);
+    media->handle = media->trim_controls ? (modifiers & GDK_SHIFT_MASK ? 1 : (modifiers & GDK_CONTROL_MASK ? 2 : 0)) : 0;
     gint64 current = media->handle == 1 ? media->start : (media->handle == 2 ? media->end : media->position);
     edit_at(media, current + (key == GDK_KEY_Left ? -100000 : 100000));
     media->handle = 0;
@@ -188,6 +189,7 @@ static void media_free(gpointer data) {
 GtkWidget *sg_media_new(void) {
     sg_ui_require_main_thread();
     Media *media = g_new0(Media, 1);
+    media->trim_controls = TRUE;
     media->root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     media->events = g_object_ref_sink(gtk_entry_new());
     media->video = gtk_video_new();
@@ -204,12 +206,12 @@ GtkWidget *sg_media_new(void) {
     media->notice = gtk_label_new("Open a video to preview and trim it here");
     gtk_label_set_wrap(GTK_LABEL(media->notice), TRUE);
     gtk_box_append(GTK_BOX(media->root), media->notice);
-    GtkWidget *transport = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    media->transport = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
     media->play = gtk_button_new_with_label("Play selection");
     gtk_widget_set_sensitive(media->play, FALSE);
     media->clock = gtk_label_new("00:00.0 / 00:00.0");
-    gtk_box_append(GTK_BOX(transport), media->play); gtk_box_append(GTK_BOX(transport), media->clock);
-    gtk_box_append(GTK_BOX(media->root), transport);
+    gtk_box_append(GTK_BOX(media->transport), media->play); gtk_box_append(GTK_BOX(media->transport), media->clock);
+    gtk_box_append(GTK_BOX(media->root), media->transport);
     media->timeline = gtk_drawing_area_new();
     gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(media->timeline), 108);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(media->timeline), draw_timeline, media, NULL);
@@ -231,12 +233,28 @@ GtkWidget *sg_media_new(void) {
     g_object_set_data_full(G_OBJECT(media->root), "sun-media", media, media_free);
     return media->root;
 }
+void sg_media_trim_controls(GtkWidget *widget, int enabled) {
+    sg_ui_require_main_thread();
+    Media *media = g_object_get_data(G_OBJECT(widget), "sun-media");
+    if (!media || media->trim_controls == !!enabled) return;
+    media->trim_controls = !!enabled;
+    gtk_widget_set_visible(media->timeline, enabled);
+    gtk_widget_set_visible(media->transport, enabled);
+    media->handle = 0;
+    if (!enabled) { media->start = 0; media->end = media->duration; }
+    gtk_widget_set_tooltip_text(media->timeline, enabled
+        ? "Drag the mint handles to trim. Click to seek. Arrows: scrub; Shift+arrows: start; Ctrl+arrows: end; Space: play/pause."
+        : "Click or drag to seek. Arrows: scrub; Space: play/pause.");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(media->timeline), GTK_ACCESSIBLE_PROPERTY_LABEL,
+                                   enabled ? "Video trim timeline" : "Video playback timeline", -1);
+    refresh(media);
+}
 void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 start, gint64 end, gint64 position) {
     sg_ui_require_main_thread();
     Media *media = g_object_get_data(G_OBJECT(widget), "sun-media");
     if (!media) return;
     gboolean changed = g_strcmp0(media->path, path) != 0;
-    media->duration = duration; media->start = start; media->end = end;
+    media->duration = duration; media->start = media->trim_controls ? start : 0; media->end = media->trim_controls ? end : duration;
     if (changed) {
         if (media->stream) {
             g_signal_handler_disconnect(media->stream, media->notify);

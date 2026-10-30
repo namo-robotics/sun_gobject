@@ -1,6 +1,12 @@
 /** Declares native widget operations used only by checked GTK wrappers. */
 public module gtk {
 
+  /** Loads or clears a native image preview, displaying decoding failures inline. */
+  extern "C" function sg_image_set(widget: raw_ptr<u8>, path: raw_ptr<u8>) void;
+
+  /** Reports whether the native preview decoded its image. */
+  extern "C" function sg_image_status(widget: raw_ptr<u8>) i32;
+
   /** Creates an independently referenced supported GTK widget. */
   extern "C" function sg_view_new(kind: i32) raw_ptr<u8>;
 
@@ -77,6 +83,9 @@ public module gtk {
 
 /** Declares the owned media widget bridge used by checked widget operations. */
 public module gtk {
+
+  /** Selects whether the native timeline permits trim edits. */
+  extern "C" function sg_media_trim_controls(widget: raw_ptr<u8>, enabled: i32) void;
 
   /** Applies a validated local source and microsecond selection without emitting edits. */
   extern "C" function sg_media_set(

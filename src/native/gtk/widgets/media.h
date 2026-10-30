@@ -2,6 +2,8 @@
 #include <gtk/gtk.h>
 /** Creates a floating media preview with playback and a draggable time-range selector. */
 GtkWidget *sg_media_new(void);
+/** Enables range editing or switches to playback and seeking over the full video. */
+void sg_media_trim_controls(GtkWidget *widget, int enabled);
 /** Applies a local source and controlled microsecond range without emitting user edits. */
 void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 start, gint64 end, gint64 position);
 /** Borrows the owned edit emitter used for queued range-change snapshots. */

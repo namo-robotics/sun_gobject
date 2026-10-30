@@ -1,5 +1,6 @@
 #include "gtk/widgets/view.h"
 #include "gtk/widgets/media.h"
+#include "gtk/widgets/image.h"
 #include "gtk/runtime/ui.h"
 #include <string.h>
 
@@ -140,6 +141,7 @@ GtkWidget *sg_view_new(int kind) {
     case 8: widget = gtk_check_button_new(); break;
     case 9: widget = gtk_drop_down_new(NULL, NULL); break;
     case 10: widget = sg_media_new(); break;
+    case 12: widget = sg_image_new(); break;
     default: return NULL;
     }
     return g_object_ref_sink(widget);

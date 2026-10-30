@@ -11,7 +11,7 @@ public module gtk {
     /** Creates a supported widget on the GTK main thread. */
     init(kind: i32) SystemResult<void> {
       require_thread();
-      if (kind < 0 or kind > 10) {
+      if (kind < 0 or (kind > 10 and kind != 12)) {
         return SystemResult.Error(Error(1, "Unknown widget kind"));
       }
       if (unsafe { gtk_init_check(); } == 0) {
@@ -34,6 +34,31 @@ public module gtk {
       require_thread();
       if (this.pointer != null) {
         unsafe { gobject.raw.g_object_unref(this.pointer); };
+      }
+    }
+
+    /** Loads a local image into an image widget; decoding errors stay in its preview. */
+    public method image(path: ref String) SystemResult<void> {
+      require_thread();
+      try validate(path);
+      if (this.kind != 12) {
+        return SystemResult.Error(Error(1, "Widget is not an image"));
+      }
+      unsafe { sg_image_set(this.pointer, path.c_str()); };
+      return SystemResult.Ok;
+    }
+
+    /** Reports empty, decoded, or failed image state without exposing native handles. */
+    public const method image_status() i32 {
+      require_thread();
+      return this.kind == 12 ? unsafe { sg_image_status(this.pointer); } : -1;
+    }
+
+    /** Enables trim handles or restricts the media timeline to playback and seeking. */
+    public method media_trim_controls(enabled: bool) void {
+      require_thread();
+      if (this.kind == 10) {
+        unsafe { sg_media_trim_controls(this.pointer, enabled ? 1 : 0); };
       }
     }
 

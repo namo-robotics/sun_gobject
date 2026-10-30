@@ -15,6 +15,7 @@ set(SUN_GOBJECT_NATIVE_SOURCES
   gtk/runtime/ui.c
   gtk/widgets/view.c
   gtk/widgets/media.c
+  gtk/widgets/image.c
   gtk/surfaces/gl_area.c
 )
 add_library(sun_gobject_native STATIC ${SUN_GOBJECT_NATIVE_SOURCES})
