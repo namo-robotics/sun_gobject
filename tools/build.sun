@@ -68,13 +68,19 @@ module build_tasks {
   }
 
   /** Forces relinking when a native dependency changed outside Sun's source cache. */
-  function native_dependency(command: ref std.process.Command, library: static_ptr<u8>, output: static_ptr<u8>) SystemResult<void> {
+  function native_dependency(
+    command: ref std.process.Command,
+    library: static_ptr<u8>,
+    output: static_ptr<u8>
+  ) SystemResult<void> {
     var a = make_heap_allocator();
     var exists = std.process.Command(a, "test");
     exists.add_arg("-f");
     exists.add_arg(library);
     if (try exists.status() != 0) {
-      return SystemResult.Error(Error(1, "Build native dependencies before compiling Sun programs"));
+      return SystemResult.Error(
+        Error(1, "Build native dependencies before compiling Sun programs")
+      );
     }
     var newer = std.process.Command(a, "test");
     newer.add_arg(library);
@@ -155,7 +161,12 @@ module build_tasks {
     probe.add_arg("build/xml-probe");
     probe.add_arg("tools/xml_probe.sun");
     if (try probe.status() != 0) {
-      return SystemResult.Error(Error(1, "XML support is required. Update the Sun development package or set SUN_EXECUTABLE to a compiler with std.XmlReader."));
+      return SystemResult.Error(
+        Error(
+          1,
+          "XML support is required. Update the Sun development package or set SUN_EXECUTABLE to a compiler with std.XmlReader."
+        )
+      );
     }
     var check = std.process.Command(a, "build/xml-probe");
     return run(check);
@@ -185,7 +196,9 @@ module build_tasks {
     var sorted = std.process.Command(a, "sh");
     sorted.add_arg("-eu");
     sorted.add_arg("-c");
-    sorted.add_arg("LC_ALL=C; export LC_ALL; sha256sum src/generator/*.sun > tmp/generator-sources.sha256; sha256sum tmp/generator-sources.sha256");
+    sorted.add_arg(
+      "LC_ALL=C; export LC_ALL; sha256sum src/generator/*.sun > tmp/generator-sources.sha256; sha256sum tmp/generator-sources.sha256"
+    );
     var hash_output = try capture(sorted);
     var words = hash_output.split_whitespace(a);
     revision.append(":sources-sha256=");
@@ -237,7 +250,11 @@ module build_tasks {
     events.add_arg("-c");
     events.add_arg("-o");
     events.add_arg("build/event-client");
-    try native_dependency(events, "build/native/libsun_gobject_test_support.a", "build/event-client");
+    try native_dependency(
+      events,
+      "build/native/libsun_gobject_test_support.a",
+      "build/event-client"
+    );
     events.add_arg("tests/event-client.sun");
     try run(events);
     println("Compiling drawing widget test client");
@@ -257,7 +274,11 @@ module build_tasks {
     tests.add_arg("-c");
     tests.add_arg("-o");
     tests.add_arg("build/sun-gobject-tests");
-    try native_dependency(tests, "build/native/libsun_gobject_test_support.a", "build/sun-gobject-tests");
+    try native_dependency(
+      tests,
+      "build/native/libsun_gobject_test_support.a",
+      "build/sun-gobject-tests"
+    );
     tests.add_arg("tests/main.sun");
     try run(tests);
     return SystemResult.Ok;
@@ -314,6 +335,8 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   } else if (args.size() == 2 and args[1].equals_literal("test")) {
     println("Running Sun tests");
     var tests = std.process.Command(a, "build/sun-gobject-tests_test");
+    // Separate Xvfb launchers must not compete for display numbers.
+    tests.add_arg("--test-sequential");
     match tests.status() {
       SystemResult.Ok(status) => {
         return status;
@@ -335,4 +358,8 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon"] }
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ]
+}

@@ -10,7 +10,7 @@ A file for guiding coding agents.
 - Full build and tests: `./build.sh`.
 - Native build: `cmake -S src/native --preset dev-fast`, then `cmake --build build/native -j$(($(nproc)/2))`. Never use all cores; a full-speed build exhausts the machine's memory.
 - Sun build: `sun tools/build.sun -- build` after building native dependencies.
-- Tests: `sun tools/build.sun -- test` runs the native Sun test functions in parallel. Use `./scripts/sun-test-compiler.sh test tests/main.sun --test-filter <name>` to rebuild and run selected tests.
+- Tests: `sun tools/build.sun -- test` runs the native Sun test functions sequentially so independent Xvfb launchers do not compete for display numbers. Use `./scripts/sun-test-compiler.sh test tests/main.sun --test-filter <name>` to rebuild and run selected tests.
 - Keep production Sun source and maintained bundle manifests in `src/`, generated Sun bindings in `src/generated/`, C source and CMake configuration in `src/native/`, XML binding configuration in `src/bindings/`, and generated reports and compiled artifacts in `build/`.
 - Keep checked GTK wrappers in `src/wrappers/gtk/` and SVG wrappers in `src/wrappers/svg/`, with at most one class per file. Keep handwritten FFI declarations, enums, and helpers alongside their wrappers in support files; do not introduce a separate FFI implementation. General GLib/GObject ownership helpers live in `src/wrappers/core.sun`. Native signal support belongs in `src/native/gobject/`, GTK runtime support in `src/native/gtk/runtime/`, custom widgets in `src/native/gtk/widgets/`, and drawing-surface integration in `src/native/gtk/surfaces/`. Update `src/sun_gobject.sun` or `src/sun_gtk.sun` when adding or moving binding files.
 

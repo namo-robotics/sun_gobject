@@ -8,7 +8,9 @@ module event_loop_tests {
     var a = make_heap_allocator();
     var command = std.process.Command(a, "sh");
     command.add_arg("-c");
-    command.add_arg("ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a \"$1/event-client\" \"$2\"");
+    command.add_arg(
+      "ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$1/event-client\" \"$2\""
+    );
     command.add_arg("event-test");
     command.add_arg(test_build.directory());
     command.add_arg(name);
@@ -89,7 +91,9 @@ module event_loop_tests {
   test_function manual() checks.Result<void> {
     var output = try scenario("manual");
     try std.test.assert_ne(output.status(), 0);
-    try std.test.assert(output.stderr().contains("Manual GTK iteration during callback dispatch is forbidden"));
+    try std.test.assert(
+      output.stderr().contains("Manual GTK iteration during callback dispatch is forbidden")
+    );
   }
 
   /** Verifies native reference release on success, callback error, and an unrun loop. */
@@ -101,10 +105,15 @@ module event_loop_tests {
   /** Prevents user code from bypassing deferred mutation through registry fields. */
   test_function registry_is_private() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("/** Attempts direct mutation of the callback registry. */\nfunction corrupt(loop: ref gtk.EventLoop<i32>) void { loop.handlers.clear(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "/** Attempts direct mutation of the callback registry. */\nfunction corrupt(loop: ref gtk.EventLoop<i32>) void { loop.handlers.clear(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     var path = fixture.file("client.sun");
     try checks.write(path, source);
-    var result = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    var result = try checks.command(
+      fixture,
+      "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\""
+    );
     try std.test.assert_ne(result.status(), 0);
     try std.test.assert(result.stderr().contains("private"));
     try std.test.assert(result.stderr().contains("handlers"));

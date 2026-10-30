@@ -12,4 +12,5 @@ parallel_jobs=$(($(nproc) / 2))
 if ((parallel_jobs < 1)); then parallel_jobs=1; fi
 cmake --build "$build_dir/native" -j"$parallel_jobs"
 "${SUN_EXECUTABLE:-sun}" "$workspace_root/tools/build.sun" -- build
-exec "$build_dir/sun-gobject-tests_test" "$@"
+# Keep independent Xvfb launchers from competing for display numbers.
+exec "$build_dir/sun-gobject-tests_test" --test-sequential "$@"

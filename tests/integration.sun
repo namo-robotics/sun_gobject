@@ -6,7 +6,10 @@ module integration_tests {
   /** Exercises checked drawing and export widgets under a real GTK main context. */
   test_function gtk_drawing_widgets() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var output = try checks.command(fixture, "exec env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo GSETTINGS_BACKEND=memory timeout 30s dbus-run-session -- xvfb-run -a \"$2/widgets-client\"");
+    var output = try checks.command(
+      fixture,
+      "exec env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo GSETTINGS_BACKEND=memory timeout 30s dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/widgets-client\""
+    );
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Checked drawing widgets passed"));
   }
@@ -14,7 +17,9 @@ module integration_tests {
   /** Stops drawing-area construction on a worker before GTK is accessed. */
   test_function gtk_drawing_rejects_worker_thread() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("using std;\n/** Attempts drawing construction on a worker. */\nfunction worker() i32 { return match gtk.DrawingArea() { SystemResult.Ok(_) => 0, SystemResult.Error(_) => 1 }; }\n/** Joins only if the thread guard failed. */\nfunction main() i32 { var thread = std.thread.spawn(worker); return thread.join(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "using std;\n/** Attempts drawing construction on a worker. */\nfunction worker() i32 { return match gtk.DrawingArea() { SystemResult.Ok(_) => 0, SystemResult.Error(_) => 1 }; }\n/** Joins only if the thread guard failed. */\nfunction main() i32 { var thread = std.thread.spawn(worker); return thread.join(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     try compile_gtk_client(fixture, source);
     var output = try checks.command(fixture, "ulimit -c 0; exec \"$1/client\"");
     try std.test.assert_ne(output.status(), 0);
@@ -24,10 +29,15 @@ module integration_tests {
   /** Prevents safe callers from reaching the drawing widget's native handle. */
   test_function gtk_drawing_handle_requires_unsafe() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("/** Attempts unsafe access from safe code. */\nfunction borrow(area: ref gtk.DrawingArea) raw_ptr<u8> { return area.raw_handle(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "/** Attempts unsafe access from safe code. */\nfunction borrow(area: ref gtk.DrawingArea) raw_ptr<u8> { return area.raw_handle(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     var path = fixture.file("client.sun");
     try checks.write(path, source);
-    var output = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    var output = try checks.command(
+      fixture,
+      "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\""
+    );
     try std.test.assert_ne(output.status(), 0);
     try std.test.assert(output.stderr().contains("unsafe"));
     try std.test.assert(output.stderr().contains("raw_handle"));
@@ -36,15 +46,23 @@ module integration_tests {
   /** Builds and runs a consumer using only a separately installed bundle. */
   test_function installed_consumer() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var installed = try checks.command(fixture, "exec \"$3\" \"$4/tools/build.sun\" -- install \"$1/install\"");
+    var installed = try checks.command(
+      fixture,
+      "exec \"$3\" \"$4/tools/build.sun\" -- install \"$1/install\""
+    );
     try checks.success(installed);
-    var source = String("using std;\n/** Confirms a separately installed bundle can own and release a GObject. */\nfunction main() i32 {\n var object = gobject.OwnedObject(unsafe { gio.raw.g_simple_action_new(\"consumer\", null); });\n if (gobject.get_boolean(object.borrow(), \"enabled\") == false) { return 1; }\n return 0;\n}\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\"] }\n");
+    var source = String(
+      "using std;\n/** Confirms a separately installed bundle can own and release a GObject. */\nfunction main() i32 {\n var object = gobject.OwnedObject(unsafe { gio.raw.g_simple_action_new(\"consumer\", null); });\n if (gobject.get_boolean(object.borrow(), \"enabled\") == false) { return 1; }\n return 0;\n}\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\"] }\n"
+    );
     var path = fixture.file("consumer.sun");
     try checks.write(path, source);
     var config = String("{\"root\":true}");
     var config_path = fixture.file("sun-config.json");
     try checks.write(config_path, config);
-    var compiled = try checks.command(fixture, "unset SUN_PATH; exec \"$3\" --dynamic --lib-path \"$1/install/lib/sun\" -L\"$1/install/lib\" -l:libsun_gobject_native.a -lgio-2.0 -lgobject-2.0 -lglib-2.0 -c -o \"$1/consumer\" \"$1/consumer.sun\"");
+    var compiled = try checks.command(
+      fixture,
+      "unset SUN_PATH; exec \"$3\" --dynamic --lib-path \"$1/install/lib/sun\" -L\"$1/install/lib\" -l:libsun_gobject_native.a -lgio-2.0 -lgobject-2.0 -lglib-2.0 -c -o \"$1/consumer\" \"$1/consumer.sun\""
+    );
     try checks.success(compiled);
     var executed = try checks.command(fixture, "exec env -u LD_LIBRARY_PATH \"$1/consumer\"");
     try checks.success(executed);
@@ -53,7 +71,10 @@ module integration_tests {
   /** Checks safe GTK text, parenting, ownership, and click events under Xvfb. */
   test_function gtk_button_interaction() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var output = try checks.command(fixture, "exec env -u LD_LIBRARY_PATH G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a \"$2/gtk-demo\" --self-test");
+    var output = try checks.command(
+      fixture,
+      "exec env -u LD_LIBRARY_PATH G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/gtk-demo\" --self-test"
+    );
     try checks.success(output);
     try std.test.assert(output.stdout().contains("GTK acceptance passed"));
   }
@@ -62,7 +83,10 @@ module integration_tests {
   function compile_gtk_client(fixture: ref checks.Fixture, source: ref String) checks.Result<void> {
     var path = fixture.file("client.sun");
     try checks.write(path, source);
-    var output = try checks.command(fixture, "exec \"$3\" --dynamic --lib-path \"$2\" -L\"$2/native\" -l:libsun_gobject_native.a -lgtk-4 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -c -o \"$1/client\" \"$1/client.sun\"");
+    var output = try checks.command(
+      fixture,
+      "exec \"$3\" --dynamic --lib-path \"$2\" -L\"$2/native\" -l:libsun_gobject_native.a -lgtk-4 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -c -o \"$1/client\" \"$1/client.sun\""
+    );
     try checks.success(output);
     return checks.Result.Ok;
   }
@@ -70,10 +94,15 @@ module integration_tests {
   /** Requires an unsafe block before exposing the safe wrapper's native handle. */
   test_function gtk_raw_handle_requires_unsafe() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("/** Attempts to bypass the safe handle boundary. */\nfunction borrow(app: ref gtk.Application) raw_ptr<u8> { return app.raw_handle(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "/** Attempts to bypass the safe handle boundary. */\nfunction borrow(app: ref gtk.Application) raw_ptr<u8> { return app.raw_handle(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     var path = fixture.file("client.sun");
     try checks.write(path, source);
-    var result = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    var result = try checks.command(
+      fixture,
+      "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\""
+    );
     try std.test.assert_ne(result.status(), 0);
     try std.test.assert(result.stderr().contains("unsafe"));
     try std.test.assert(result.stderr().contains("raw_handle"));
@@ -82,7 +111,9 @@ module integration_tests {
   /** Rejects GTK construction on a worker before touching GTK or the display. */
   test_function gtk_rejects_worker_thread() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("using std;\n/** Attempts GTK construction on a worker. */\nfunction worker() i32 { var label = String(\"thread\"); return match gtk.Button(label) { SystemResult.Ok(button) => 0, SystemResult.Error(_) => 1 }; }\n/** Joins the worker if the main-thread guard fails to stop it. */\nfunction main() i32 { var thread = std.thread.spawn(worker); return thread.join(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "using std;\n/** Attempts GTK construction on a worker. */\nfunction worker() i32 { var label = String(\"thread\"); return match gtk.Button(label) { SystemResult.Ok(button) => 0, SystemResult.Error(_) => 1 }; }\n/** Joins the worker if the main-thread guard fails to stop it. */\nfunction main() i32 { var thread = std.thread.spawn(worker); return thread.join(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     try compile_gtk_client(fixture, source);
     var result = try checks.command(fixture, "ulimit -c 0; exec env \"$1/client\"");
     try std.test.assert_ne(result.status(), 0);
@@ -92,9 +123,14 @@ module integration_tests {
   /** Rejects destruction on a worker even when construction occurred on the main thread. */
   test_function gtk_rejects_worker_destruction() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("using std;\n/** Drops the moved button when this worker returns. */\nfunction drop(button: gtk.Button) i32 { return 0; }\n/** Moves a valid button into a worker to exercise destructor enforcement. */\nfunction main() i32 { var label = String(\"thread\"); return match gtk.Button(label) { SystemResult.Ok(button) => { var thread = std.thread.spawn(drop, button); return thread.join(); }, SystemResult.Error(_) => 1 }; }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "using std;\n/** Drops the moved button when this worker returns. */\nfunction drop(button: gtk.Button) i32 { return 0; }\n/** Moves a valid button into a worker to exercise destructor enforcement. */\nfunction main() i32 { var label = String(\"thread\"); return match gtk.Button(label) { SystemResult.Ok(button) => { var thread = std.thread.spawn(drop, button); return thread.join(); }, SystemResult.Error(_) => 1 }; }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     try compile_gtk_client(fixture, source);
-    var result = try checks.command(fixture, "ulimit -c 0; exec env GTK_A11Y=none xvfb-run -a \"$1/client\"");
+    var result = try checks.command(
+      fixture,
+      "ulimit -c 0; exec env GTK_A11Y=none xvfb-run -a -e /dev/stderr \"$1/client\""
+    );
     try std.test.assert_ne(result.status(), 0);
     try std.test.assert(result.stderr().contains("must be used and destroyed on the main thread"));
   }
@@ -102,10 +138,15 @@ module integration_tests {
   /** Keeps owned native pointers inaccessible to safe callers. */
   test_function gtk_ownership_fields_are_private() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String("/** Attempts to overwrite an owned pointer from client code. */\nfunction corrupt(button: ref gtk.Button) void { button.pointer = null; }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n");
+    var source = String(
+      "/** Attempts to overwrite an owned pointer from client code. */\nfunction corrupt(button: ref gtk.Button) void { button.pointer = null; }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
+    );
     var path = fixture.file("client.sun");
     try checks.write(path, source);
-    var result = try checks.command(fixture, "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\"");
+    var result = try checks.command(
+      fixture,
+      "exec \"$3\" --lib-path \"$2\" --emit-moon -o \"$1/client.moon\" \"$1/client.sun\""
+    );
     try std.test.assert_ne(result.status(), 0);
     try std.test.assert(result.stderr().contains("private"));
     try std.test.assert(result.stderr().contains("pointer"));
