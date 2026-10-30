@@ -43,8 +43,8 @@ Use `./scripts/bootstrap-sun.sh --update` to update the mutable dev release, or
 `SUN_EXECUTABLE=/absolute/path/to/sun ./build.sh` to select an installation with a
 matching standard library.
 
-The current baseline is Sun `0.dev (fc9a5b23cc63)`. Recreating the devcontainer
-updates the rolling development package; rebuild all bundles together after a
+The current baseline is Sun `0.dev (fc9a5b23cc63)`. Update the rolling development package explicitly with
+`./scripts/bootstrap-sun.sh --update`; rebuild all bundles together after a
 compiler update.
 
 The bundle manifests declare stable library IDs: `namo-robotics/sun_gobject` and
@@ -300,3 +300,8 @@ with the dependencies listed in `.github/workflows/ci.yml`.
 Archives include the compiler version used to build the bundles. Consumers must
 use a compatible compiler and matching native dependencies; Linux bundles cannot
 be reused on macOS. Intel macOS is not covered by these releases.
+
+## Shared development container
+
+See [.devcontainer/README.md](.devcontainer/README.md) for the applied Sun template
+version, project-specific settings, and rebuild instructions.
