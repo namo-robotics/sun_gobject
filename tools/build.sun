@@ -360,6 +360,20 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   } else if (args.size() == 3 and args[1].equals_literal("install")) {
     result = build_tasks.install(args[2]);
   } else if (args.size() == 2 and args[1].equals_literal("test")) {
+    var media = std.process.Command(a, "xvfb-run");
+    media.add_arg("-a");
+    media.add_arg("build/native/media-seek-tests");
+    match media.status() {
+      SystemResult.Ok(status) => {
+        if (status != 0) {
+          return status;
+        }
+      },
+      SystemResult.Error(error) => {
+        eprintln(error.message());
+        return 1;
+      }
+    };
     println("Running Sun tests");
     var tests = std.process.Command(a, "build/sun-gobject-tests_test");
     // Separate Xvfb launchers must not compete for display numbers.

@@ -115,7 +115,7 @@ public module gtk {
       return SystemResult.Ok;
     }
 
-    /** Reports preview availability without exposing media-stream ownership. */
+    /** Reports error (-1), preparing (0), paused (1), playing (2), or seeking (3). */
     public const method media_status() i32 {
       require_thread();
       return this.kind == 10 ? unsafe { sg_media_status(this.pointer); } : -1;

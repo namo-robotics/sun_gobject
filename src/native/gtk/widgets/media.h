@@ -10,7 +10,7 @@ void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 s
 GtkWidget *sg_media_events(GtkWidget *widget);
 /** Exercises the same gesture callbacks as pointer input using normalized timeline coordinates. */
 void sg_media_drag(GtkWidget *widget, double from, double to);
-/** Reports unavailable, preparing, prepared, or playing media as a checked diagnostic. */
+/** Reports error (-1), preparing (0), paused (1), playing (2), or seeking (3). */
 int sg_media_status(GtkWidget *widget);
 /** Toggles playback of the selected interval through the normal playback handler. */
 void sg_media_toggle(GtkWidget *widget);

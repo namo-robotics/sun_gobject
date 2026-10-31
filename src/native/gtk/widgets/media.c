@@ -426,6 +426,7 @@ int sg_media_status(GtkWidget *widget) {
     if (!media || !media->stream) return 0;
     if (gtk_media_stream_get_error(media->stream)) return -1;
     if (!gtk_media_stream_is_prepared(media->stream)) return 0;
+    if (gtk_media_stream_is_seeking(media->stream)) return 3;
     return gtk_media_stream_get_playing(media->stream) ? 2 : 1;
 }
 void sg_media_toggle(GtkWidget *widget) {
