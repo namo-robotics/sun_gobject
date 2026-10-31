@@ -204,7 +204,54 @@ function run() SystemResult<void> {
   };
   eprintln("Dialogs closed; checking declarative widgets");
   try declarative_widgets(app);
+  try kept_media_sections(app);
   println("Checked drawing widgets passed");
+  return SystemResult.Ok;
+}
+
+/** Exercises shared-boundary drags and rejects malformed kept-section updates. */
+function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
+  var window = gtk.Window(app);
+  var media = try gtk.Widget(10);
+  var path = String("");
+  try media.media(path, 4000000, 0, 2000000, 0);
+  var ranges = String("1,0,2000000;2,2000000,4000000");
+  try media.media_ranges(ranges, 1);
+  var invalid = String("1,0,3000000;2,2000000,4000000");
+  match media.media_ranges(invalid, 1) {
+    SystemResult.Error(_) => {},
+    SystemResult.Ok => {
+      return SystemResult.Error(Error(1, "Overlapping media ranges accepted"));
+    }
+  };
+  try window.set_widget(media);
+  try window.set_default_size(800, 500);
+  try window.present();
+  for (var i: i64 = 0; i < 50; i += 1) {
+    app.iterate(false);
+    unsafe { g_usleep(10000); };
+  }
+  var queue = try gtk.EventQueue(app);
+  var registration = try queue.on_widget(media);
+  try media.drag_media(0.5, 0.75);
+  var edited = false;
+  while (true) {
+    match queue.next() {
+      Option.Some(event) => {
+        edited = edited or event.text.equals_literal("3000000:4000000:3000000:2");
+      },
+      Option.None => {
+        break;
+      }
+    };
+  }
+  if (not edited) {
+    return SystemResult.Error(
+      Error(1, "Shared trim boundary did not select the right start handle")
+    );
+  }
+  try queue.disconnect(registration);
+  window.close();
   return SystemResult.Ok;
 }
 

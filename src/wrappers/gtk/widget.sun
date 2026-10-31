@@ -37,6 +37,29 @@ public module gtk {
       }
     }
 
+    /** Applies hover help and an optional themed icon without exposing native handles. */
+    public method hint(tooltip: ref String, icon: ref String) SystemResult<void> {
+      require_thread();
+      try validate(tooltip);
+      try validate(icon);
+      if (not icon.is_empty() and this.kind != 6) {
+        return SystemResult.Error(Error(1, "Only buttons support icons"));
+      }
+      unsafe { sg_view_hint(this.pointer, tooltip.c_str(), icon.c_str()); };
+      return SystemResult.Ok;
+    }
+
+    /** Installs validated, chronological kept ranges without emitting editing events. */
+    public method media_ranges(encoded: ref String, active: i64) SystemResult<void> {
+      require_thread();
+      try validate(encoded);
+      if (this.kind != 10 or
+        unsafe { sg_media_ranges(this.pointer, encoded.c_str(), active); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid kept video sections"));
+      }
+      return SystemResult.Ok;
+    }
+
     /** Loads a local image into an image widget; decoding errors stay in its preview. */
     public method image(path: ref String) SystemResult<void> {
       require_thread();

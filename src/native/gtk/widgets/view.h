@@ -28,3 +28,6 @@ gboolean sg_view_track(GtkWidget *widget, gboolean horizontal, int kind, int val
 void sg_view_edit(GtkWidget *widget, const char *text, int value);
 /** Reports a widget's allocated dimension for layout verification. */
 int sg_view_extent(GtkWidget *widget, gboolean horizontal);
+
+/** Sets hover help and optional button imagery, using help text as the accessible name. */
+void sg_view_hint(GtkWidget *widget, const char *tooltip, const char *icon);

@@ -112,3 +112,17 @@ public module gtk {
   /** Reports the actual decoded playback timestamp. */
   extern "C" function sg_media_timestamp(widget: raw_ptr<u8>) i64;
 }
+
+/** Declares tooltip, icon, and multi-section media operations on owned GTK widgets. */
+public module gtk {
+
+  /** Copies a native tooltip used for hover help and the accessible label of icon buttons. */
+  extern "C" function sg_view_hint(
+    widget: raw_ptr<u8>,
+    tooltip: raw_ptr<u8>,
+    icon: raw_ptr<u8>
+  ) void;
+
+  /** Copies and validates chronological kept ranges encoded as id,start,end records. */
+  extern "C" function sg_media_ranges(widget: raw_ptr<u8>, encoded: raw_ptr<u8>, active: i64) i32;
+}

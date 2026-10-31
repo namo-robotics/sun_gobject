@@ -16,3 +16,6 @@ int sg_media_status(GtkWidget *widget);
 void sg_media_toggle(GtkWidget *widget);
 /** Reports the decoded media timestamp in microseconds for preview verification. */
 gint64 sg_media_timestamp(GtkWidget *widget);
+
+/** Atomically replaces ordered id,start,end intervals; rejects malformed or overlapping ranges. */
+int sg_media_ranges(GtkWidget *widget, const char *encoded, gint64 active);

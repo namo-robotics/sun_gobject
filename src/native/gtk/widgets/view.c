@@ -302,3 +302,17 @@ void sg_view_edit(GtkWidget *widget, const char *text, int value) {
 int sg_view_extent(GtkWidget *widget, gboolean horizontal) {
     return horizontal ? gtk_widget_get_width(widget) : gtk_widget_get_height(widget);
 }
+
+/** Applies hover help and an optional icon while retaining an accessible button name. */
+void sg_view_hint(GtkWidget *widget, const char *tooltip, const char *icon) {
+    sg_ui_require_main_thread();
+    gtk_widget_set_tooltip_text(widget, *tooltip ? tooltip : NULL);
+    if (GTK_IS_BUTTON(widget) && *icon) {
+        GtkWidget *image = strchr(icon, '/') ? gtk_image_new_from_file(icon) : gtk_image_new_from_icon_name(icon);
+        gtk_image_set_pixel_size(GTK_IMAGE(image), 20);
+        gtk_button_set_child(GTK_BUTTON(widget), image);
+        gtk_accessible_update_property(GTK_ACCESSIBLE(widget), GTK_ACCESSIBLE_PROPERTY_LABEL, tooltip, -1);
+    } else if (GTK_IS_BUTTON(widget)) {
+        gtk_accessible_reset_property(GTK_ACCESSIBLE(widget), GTK_ACCESSIBLE_PROPERTY_LABEL);
+    }
+}

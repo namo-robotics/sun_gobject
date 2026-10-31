@@ -2,6 +2,10 @@
 #include "gtk/runtime/ui.h"
 #include <math.h>
 #include <string.h>
+#include <errno.h>
+
+/** One chronological kept interval with an application-owned stable identifier. */
+typedef struct { gint64 id, start, end; } MediaRange;
 
 /** Owns native media state; callbacks retain no Sun storage or application references. */
 typedef struct {
@@ -13,9 +17,23 @@ typedef struct {
     double origin;
     int handle;
     gboolean trim_controls;
+    GArray *ranges;
+    gint64 range_id, emitted_position;
+    int boundary;
     gulong notify;
 } Media;
 
+/** Selects one kept interval for handle editing without changing playback position. */
+static void select_range(Media *media, guint index) {
+    MediaRange *range = &g_array_index(media->ranges, MediaRange, index);
+    media->range_id = range->id; media->start = range->start; media->end = range->end;
+}
+/** Returns the active range index, or no selection for the legacy single interval. */
+static int active_index(Media *media) {
+    for (guint i = 0; i < media->ranges->len; i++)
+        if (g_array_index(media->ranges, MediaRange, i).id == media->range_id) return (int)i;
+    return -1;
+}
 /** Formats a microsecond timestamp for compact playback and timeline labels. */
 static char *time_label(gint64 value) {
     gint64 seconds = MAX(0, value) / G_USEC_PER_SEC;
@@ -43,8 +61,8 @@ static void refresh(Media *media) {
 }
 /** Captures a range edit as an owned GTK text value for the existing FIFO event bridge. */
 static void emit_edit(Media *media) {
-    char *value = g_strdup_printf("%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT,
-                                 media->start, media->end, media->position);
+    char *value = g_strdup_printf("%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT ":%" G_GINT64_FORMAT,
+                                 media->start, media->end, media->position, media->range_id);
     gtk_editable_set_text(GTK_EDITABLE(media->events), value);
     g_free(value);
     refresh(media);
@@ -56,7 +74,7 @@ static void seek_to(Media *media, gint64 position) {
         gtk_media_stream_seek(media->stream, media->position);
     refresh(media);
 }
-/** Updates native playback state and stops at the selected out point. */
+/** Advances through kept sections, skips gaps, and reports playhead changes to the application. */
 static void stream_changed(GObject *object, GParamSpec *property, gpointer data) {
     (void)object;
     Media *media = data;
@@ -74,8 +92,21 @@ static void stream_changed(GObject *object, GParamSpec *property, gpointer data)
     }
     if (!strcmp(property->name, "timestamp")) {
         media->position = gtk_media_stream_get_timestamp(media->stream);
-        if (media->position >= media->end && gtk_media_stream_get_playing(media->stream))
-            gtk_media_stream_pause(media->stream);
+        if (gtk_media_stream_get_playing(media->stream)) {
+            gint64 next = -1;
+            if (media->ranges->len) {
+                for (guint i = 0; i < media->ranges->len; i++) {
+                    MediaRange range = g_array_index(media->ranges, MediaRange, i);
+                    if (media->position < range.end) { next = MAX(media->position, range.start); select_range(media, i); break; }
+                }
+            } else if (media->position < media->end) next = MAX(media->position, media->start);
+            if (next < 0) gtk_media_stream_pause(media->stream);
+            else if (next != media->position) seek_to(media, next);
+        }
+        if (llabs(media->position - media->emitted_position) >= 100000) {
+            media->emitted_position = media->position;
+            emit_edit(media);
+        }
     }
     refresh(media);
 }
@@ -86,7 +117,14 @@ static void toggle_play(GtkButton *button, gpointer data) {
     if (!media->stream || !gtk_media_stream_is_prepared(media->stream)) return;
     if (gtk_media_stream_get_playing(media->stream)) gtk_media_stream_pause(media->stream);
     else {
-        if (media->position < media->start || media->position >= media->end - 1000)
+        if (media->ranges->len) {
+            gint64 next = g_array_index(media->ranges, MediaRange, 0).start;
+            for (guint i = 0; i < media->ranges->len; i++) {
+                MediaRange range = g_array_index(media->ranges, MediaRange, i);
+                if (media->position < range.end - 1000) { next = MAX(media->position, range.start); break; }
+            }
+            seek_to(media, next);
+        } else if (media->position < media->start || media->position >= media->end - 1000)
             seek_to(media, media->start);
         gtk_media_stream_play(media->stream);
     }
@@ -97,9 +135,15 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
     (void)area; (void)height;
     Media *media = data;
     cairo_set_source_rgb(cr, .055, .075, .12); cairo_paint(cr);
-    double left = time_x(media, media->start), right = time_x(media, media->end);
     cairo_set_source_rgb(cr, .15, .19, .27); cairo_rectangle(cr, 18, 28, width - 36, 44); cairo_fill(cr);
-    cairo_set_source_rgb(cr, .14, .31, .45); cairo_rectangle(cr, left, 28, MAX(0, right - left), 44); cairo_fill(cr);
+    guint count = MAX(1, media->ranges->len);
+    for (guint i = 0; i < count; i++) {
+        MediaRange range = media->ranges->len ? g_array_index(media->ranges, MediaRange, i)
+                                            : (MediaRange){0, media->start, media->end};
+        double first = time_x(media, range.start), last = time_x(media, range.end);
+        cairo_set_source_rgb(cr, .14, range.id == media->range_id ? .36 : .25, .45);
+        cairo_rectangle(cr, first, 28, MAX(0, last - first), 44); cairo_fill(cr);
+    }
     cairo_set_line_width(cr, 1);
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 11);
@@ -110,12 +154,17 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
         cairo_text_extents_t extents; cairo_text_extents(cr, text, &extents);
         cairo_move_to(cr, CLAMP(x - extents.width / 2, 4, width - extents.width - 4), 99); cairo_show_text(cr, text); g_free(text);
     }
-    for (int i = 0; media->trim_controls && i < 2; i++) {
-        double x = i == 0 ? left : right;
-        cairo_set_source_rgb(cr, .34, .93, .82); cairo_rectangle(cr, x - 7, 23, 14, 54); cairo_fill(cr);
-        cairo_set_source_rgb(cr, .035, .12, .14); cairo_set_line_width(cr, 2);
-        cairo_move_to(cr, x - 2, 41); cairo_line_to(cr, x - 2, 59);
-        cairo_move_to(cr, x + 2, 41); cairo_line_to(cr, x + 2, 59); cairo_stroke(cr);
+    for (guint n = 0; media->trim_controls && n < count; n++) {
+        MediaRange range = media->ranges->len ? g_array_index(media->ranges, MediaRange, n)
+                                            : (MediaRange){0, media->start, media->end};
+        for (int side = 0; side < 2; side++) {
+            double x = time_x(media, side ? range.end : range.start);
+            double direction = side ? -1 : 1;
+            cairo_set_source_rgb(cr, .34, .93, .82);
+            cairo_rectangle(cr, side ? x - 4 : x, 23, 4, 54); cairo_fill(cr);
+            cairo_move_to(cr, x, 40); cairo_line_to(cr, x + direction * 11, 50);
+            cairo_line_to(cr, x, 60); cairo_close_path(cr); cairo_fill(cr);
+        }
     }
     double playhead = time_x(media, media->position);
     cairo_set_source_rgb(cr, .96, .98, 1); cairo_set_line_width(cr, 2);
@@ -125,12 +174,20 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
 /** Applies one pointer or keyboard edit with a positive minimum selection length. */
 static void edit_at(Media *media, gint64 value) {
     if (media->duration <= 0 || !gtk_widget_is_sensitive(media->root)) return;
+    int index = active_index(media);
+    gint64 lower = index > 0 ? g_array_index(media->ranges, MediaRange, index - 1).end : 0;
+    gint64 upper = index >= 0 && (guint)(index + 1) < media->ranges->len
+        ? g_array_index(media->ranges, MediaRange, index + 1).start : media->duration;
     if (media->handle == 1) {
-        gint64 minimum = MIN((gint64)100000, media->end);
-        media->start = CLAMP(value, (gint64)0, media->end - minimum); value = media->start;
+        gint64 minimum = MIN((gint64)1000, media->end - lower);
+        media->start = CLAMP(value, lower, media->end - minimum); value = media->start;
     } else if (media->handle == 2) {
-        gint64 minimum = MIN((gint64)100000, media->duration - media->start);
-        media->end = CLAMP(value, media->start + minimum, media->duration); value = media->end;
+        gint64 minimum = MIN((gint64)1000, upper - media->start);
+        media->end = CLAMP(value, media->start + minimum, upper); value = media->end;
+    }
+    if (index >= 0 && media->handle) {
+        MediaRange *range = &g_array_index(media->ranges, MediaRange, index);
+        range->start = media->start; range->end = media->end;
     }
     if (media->stream) gtk_media_stream_pause(media->stream);
     seek_to(media, value);
@@ -142,14 +199,42 @@ static void drag_begin(GtkGestureDrag *gesture, double x, double y, gpointer dat
     Media *media = data;
     gtk_widget_grab_focus(media->timeline);
     media->origin = x;
-    double left = fabs(x - time_x(media, media->start)), right = fabs(x - time_x(media, media->end));
-    media->handle = media->trim_controls && MIN(left, right) <= 16 ? (left <= right ? 1 : 2) : 0;
-    edit_at(media, x_time(media, x));
+    media->boundary = -1;
+    double nearest = 17;
+    media->handle = 0;
+    if (media->trim_controls && media->ranges->len) {
+        for (guint i = 0; i < media->ranges->len; i++) {
+            MediaRange range = g_array_index(media->ranges, MediaRange, i);
+            for (int side = 0; side < 2; side++) {
+                double distance = fabs(x - time_x(media, side ? range.end : range.start));
+                if (distance < nearest) { nearest = distance; select_range(media, i); media->handle = side + 1; }
+            }
+            if (i + 1 < media->ranges->len && range.end == g_array_index(media->ranges, MediaRange, i + 1).start
+                && fabs(x - time_x(media, range.end)) <= 7) media->boundary = (int)i;
+        }
+    } else if (media->trim_controls) {
+        double left = fabs(x - time_x(media, media->start)), right = fabs(x - time_x(media, media->end));
+        media->handle = MIN(left, right) <= 16 ? (left <= right ? 1 : 2) : 0;
+    }
+    if (!media->handle && media->ranges->len) {
+        gint64 position = x_time(media, x);
+        for (guint i = 0; i < media->ranges->len; i++) {
+            MediaRange range = g_array_index(media->ranges, MediaRange, i);
+            if (position >= range.start && position < range.end) { select_range(media, i); break; }
+        }
+    }
+    if (media->boundary < 0) edit_at(media, x_time(media, x));
 }
 /** Continues a real drag using offsets from its original timeline coordinate. */
 static void drag_update(GtkGestureDrag *gesture, double x, double y, gpointer data) {
     (void)gesture; (void)y;
     Media *media = data;
+    if (media->boundary >= 0) {
+        if (fabs(x) < 1) return;
+        select_range(media, (guint)(media->boundary + (x > 0 ? 1 : 0)));
+        media->handle = x > 0 ? 1 : 2;
+        media->boundary = -1;
+    }
     edit_at(media, x_time(media, media->origin + x));
 }
 /** Completes a drag using the same clamping rules as intermediate motion. */
@@ -184,12 +269,15 @@ static void media_free(gpointer data) {
         g_object_unref(media->stream);
     }
     g_object_unref(media->events);
+    g_array_unref(media->ranges);
     g_free(media->path); g_free(media);
 }
 GtkWidget *sg_media_new(void) {
     sg_ui_require_main_thread();
     Media *media = g_new0(Media, 1);
     media->trim_controls = TRUE;
+    media->ranges = g_array_new(FALSE, FALSE, sizeof(MediaRange));
+    media->boundary = -1;
     media->root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     media->events = g_object_ref_sink(gtk_entry_new());
     media->video = gtk_video_new();
@@ -273,9 +361,49 @@ void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 s
             gtk_video_set_media_stream(GTK_VIDEO(media->video), media->stream);
         }
     }
-    if (changed || position != media->requested) seek_to(media, position);
+    if (changed || (position != media->requested && position != media->position)) seek_to(media, position);
     media->requested = position;
     refresh(media);
+}
+int sg_media_ranges(GtkWidget *widget, const char *encoded, gint64 active) {
+    sg_ui_require_main_thread();
+    Media *media = g_object_get_data(G_OBJECT(widget), "sun-media");
+    if (!media) return 0;
+    GArray *ranges = g_array_new(FALSE, FALSE, sizeof(MediaRange));
+    const char *cursor = encoded;
+    gboolean found = !*encoded;
+    while (*cursor) {
+        MediaRange range;
+        gint64 *values[] = {&range.id, &range.start, &range.end};
+        for (int i = 0; i < 3; i++) {
+            if (!g_ascii_isdigit(*cursor)) goto invalid;
+            char *end = NULL;
+            errno = 0;
+            *values[i] = g_ascii_strtoll(cursor, &end, 10);
+            if (errno || end == cursor || (i < 2 && *end != ',')) goto invalid;
+            cursor = i < 2 ? end + 1 : end;
+        }
+        if (ranges->len >= 64 || range.start >= range.end || range.end > media->duration) goto invalid;
+        if (ranges->len && range.start < g_array_index(ranges, MediaRange, ranges->len - 1).end) goto invalid;
+        for (guint i = 0; i < ranges->len; i++)
+            if (g_array_index(ranges, MediaRange, i).id == range.id) goto invalid;
+        if (range.id == active) found = TRUE;
+        g_array_append_val(ranges, range);
+        if (*cursor == ';' && cursor[1]) cursor++;
+        else if (*cursor) goto invalid;
+    }
+    if (!found) goto invalid;
+    gboolean changed = ranges->len != media->ranges->len ||
+        (ranges->len && memcmp(ranges->data, media->ranges->data, ranges->len * sizeof(MediaRange)) != 0);
+    if (changed && media->stream) gtk_media_stream_pause(media->stream);
+    g_array_unref(media->ranges); media->ranges = ranges;
+    media->range_id = active;
+    if (ranges->len) select_range(media, (guint)active_index(media));
+    refresh(media);
+    return 1;
+invalid:
+    g_array_unref(ranges);
+    return 0;
 }
 GtkWidget *sg_media_events(GtkWidget *widget) {
     sg_ui_require_main_thread();
