@@ -11,7 +11,64 @@ typedef struct {
     char *error;
     int x, y, width, height, logical_width, logical_height;
     int frame_width, frame_height;
+    GMutex layout_lock;
+    int screen_width, screen_height, camera_width, camera_height, corner, size;
 } Pipeline;
+
+/** Fixes the output canvas and camera rectangle from negotiated source dimensions. */
+static GstPadProbeReturn layout_probe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
+    Pipeline *p = data;
+    GstEvent *event = GST_PAD_PROBE_INFO_EVENT(info);
+    if (GST_EVENT_TYPE(event) != GST_EVENT_CAPS) return GST_PAD_PROBE_OK;
+    GstCaps *caps;
+    gst_event_parse_caps(event, &caps);
+    const GstStructure *s = gst_caps_get_structure(caps, 0);
+    int width = 0, height = 0;
+    gst_structure_get_int(s, "width", &width); gst_structure_get_int(s, "height", &height);
+    GstElement *element = gst_pad_get_parent_element(pad);
+    gboolean screen = g_str_equal(GST_OBJECT_NAME(element), "screen_geometry");
+    g_mutex_lock(&p->layout_lock);
+    int old_width = screen ? p->screen_width : p->camera_width;
+    int old_height = screen ? p->screen_height : p->camera_height;
+    if (width <= 0 || height <= 0 || (old_width && (old_width != width || old_height != height))) {
+        g_mutex_unlock(&p->layout_lock);
+        GST_ELEMENT_ERROR(element, STREAM, FORMAT, ("Capture source dimensions changed during recording"), (NULL));
+        gst_object_unref(element); return GST_PAD_PROBE_DROP;
+    }
+    if (screen) { p->screen_width = width; p->screen_height = height; }
+    else { p->camera_width = width; p->camera_height = height; }
+    int sw = p->screen_width, sh = p->screen_height, cw = p->camera_width, ch = p->camera_height;
+    g_mutex_unlock(&p->layout_lock);
+    gst_object_unref(element);
+    GstElement *mixer = gst_bin_get_by_name(GST_BIN(p->pipeline), "presenter");
+    if (screen && mixer) {
+        GstElement *canvas = gst_bin_get_by_name(GST_BIN(p->pipeline), "canvas");
+        if (canvas) {
+            GstCaps *output = gst_caps_new_simple("video/x-raw", "width", G_TYPE_INT, (sw + 1) / 2 * 2,
+                "height", G_TYPE_INT, (sh + 1) / 2 * 2, "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1, NULL);
+            g_object_set(canvas, "caps", output, NULL); gst_caps_unref(output); gst_object_unref(canvas);
+        }
+    }
+    if (mixer && sw && sh && cw && ch) {
+        GstPad *inset = gst_element_get_static_pad(mixer, "sink_1");
+        if (inset) {
+            double fraction = p->size == 0 ? .2 : p->size == 1 ? .3 : .4;
+            double scale = MIN(sw * fraction / cw, sh * fraction / ch);
+            int w = MAX(1, (int)(cw * scale)), h = MAX(1, (int)(ch * scale));
+            g_object_set(inset, "width", w, "height", h, "xpos", (p->corner == 0 || p->corner == 2) ? sw - w : 0,
+                "ypos", p->corner < 2 ? sh - h : 0, NULL);
+            gst_object_unref(inset);
+        }
+    }
+    gst_clear_object(&mixer);
+    return GST_PAD_PROBE_OK;
+}
+
+/** Stores a validated camera layout before streaming begins. */
+int sg_pipeline_presenter(Pipeline *p, int corner, int size) {
+    if (!p || corner < 0 || corner > 3 || size < 0 || size > 2) return 0;
+    p->corner = corner; p->size = size; return 1;
+}
 
 /** Checks caps before buffers pass downstream; no application callbacks run on this thread. */
 static GstPadProbeReturn caps_probe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
@@ -40,7 +97,9 @@ static GstPadProbeReturn caps_probe(GstPad *pad, GstPadProbeInfo *info, gpointer
         g_object_set(element, "left", left, "top", top, "right", right, "bottom", bottom, NULL);
     } else {
         gint64 bitrate = CLAMP((gint64)width * height * 30 / 4, 2000000, 120000000);
-        g_object_set(element, "target-bitrate", (int)bitrate, NULL);
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(element), "target-bitrate"))
+            g_object_set(element, "target-bitrate", (int)bitrate, NULL);
+        else g_object_set(element, "bitrate", (guint)(bitrate / 1000), NULL);
     }
     gst_object_unref(element);
     return GST_PAD_PROBE_OK;
@@ -50,6 +109,7 @@ static GstPadProbeReturn caps_probe(GstPad *pad, GstPadProbeInfo *info, gpointer
 void *sg_pipeline_new(const char *description) {
     gst_init(NULL, NULL);
     Pipeline *p = g_new0(Pipeline, 1);
+    g_mutex_init(&p->layout_lock);
     p->output_fd = -1; p->remote_fd = -1;
     GError *error = NULL;
     p->pipeline = gst_parse_launch(description, &error);
@@ -110,13 +170,23 @@ int sg_pipeline_play(Pipeline *p) {
         if (!element) continue;
         GstElementFactory *factory = gst_element_get_factory(element);
         const char *factory_name = factory ? gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)) : "";
-        if (!g_str_equal(factory_name, i == 0 ? "videocrop" : "vp8enc")) {
+        if ((i == 0 && !g_str_equal(factory_name, "videocrop")) ||
+            (i == 1 && !g_str_equal(factory_name, "vp8enc") && !g_str_equal(factory_name, "x264enc"))) {
             gst_object_unref(element); return 0;
         }
         if (i == 0 && !p->logical_width) { gst_object_unref(element); return 0; }
         GstPad *pad = gst_element_get_static_pad(element, "sink");
         if (!pad) { gst_object_unref(element); return 0; }
         gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, caps_probe, p, NULL);
+        gst_object_unref(pad); gst_object_unref(element);
+    }
+    const char *geometry[] = {"screen_geometry", "camera_geometry"};
+    for (int i = 0; i < 2; ++i) {
+        GstElement *element = gst_bin_get_by_name(GST_BIN(p->pipeline), geometry[i]);
+        if (!element) continue;
+        GstPad *pad = gst_element_get_static_pad(element, "sink");
+        if (!pad) { gst_object_unref(element); return 0; }
+        gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, layout_probe, p, NULL);
         gst_object_unref(pad); gst_object_unref(element);
     }
     return gst_element_set_state(p->pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE;
@@ -150,12 +220,15 @@ int sg_pipeline_poll(Pipeline *p) {
 /** Sends EOS downstream of the source so a revoked PipeWire stream can still finalize. */
 int sg_pipeline_finish(Pipeline *p) {
     if (!p->pipeline) return 0;
-    GstElement *queue = gst_bin_get_by_name(GST_BIN(p->pipeline), "capture_queue");
-    if (!queue) return 0;
-    GstPad *pad = gst_element_get_static_pad(queue, "sink");
-    if (!pad) { gst_object_unref(queue); return 0; }
-    int ok = gst_pad_send_event(pad, gst_event_new_eos());
-    gst_object_unref(pad); gst_object_unref(queue);
+    int ok = 1;
+    const char *names[] = {"capture_queue", "camera_queue", "microphone_queue"};
+    for (int i = 0; i < 3; ++i) {
+        GstElement *queue = gst_bin_get_by_name(GST_BIN(p->pipeline), names[i]);
+        if (!queue) { if (i == 0) ok = 0; continue; }
+        GstPad *pad = gst_element_get_static_pad(queue, "sink");
+        if (!pad || !gst_pad_send_event(pad, gst_event_new_eos())) ok = 0;
+        gst_clear_object(&pad); gst_object_unref(queue);
+    }
     return ok;
 }
 
@@ -166,5 +239,6 @@ void sg_pipeline_free(Pipeline *p) {
     gst_clear_object(&p->bus); gst_clear_object(&p->pipeline);
     if (p->output_fd >= 0) close(p->output_fd);
     if (p->remote_fd >= 0) close(p->remote_fd);
+    g_mutex_clear(&p->layout_lock);
     g_free(p->error); g_free(p);
 }

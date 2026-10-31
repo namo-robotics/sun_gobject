@@ -18,6 +18,9 @@ public module desktop {
   /** Flushes and publishes without replacing an existing file. */
   extern "C" function sg_output_publish(p: raw_ptr<u8>, destination: raw_ptr<u8>) i32;
 
+  /** Retains an unpublished output on failure and borrows its recovery path. */
+  extern "C" function sg_output_preserve(p: raw_ptr<u8>) raw_ptr<u8>;
+
   /** Owns a private file until successful publication or destructor cleanup. */
   public class Output {
     var pointer: raw_ptr<u8> = null;
@@ -64,6 +67,14 @@ public module desktop {
         return SystemResult.Error(this.error());
       }
       return SystemResult.Ok(fd);
+    }
+
+    /** Keeps partial output for recovery; call after the writing pipeline has stopped. */
+    public method preserve() String {
+      if (this.pointer == null) {
+        return String("");
+      }
+      return from_c_str(make_heap_allocator(), unsafe { sg_output_preserve(this.pointer); });
     }
 
     /** Publishes finalized output; callers must first stop the writing pipeline. */

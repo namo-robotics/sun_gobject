@@ -7,7 +7,7 @@
 #include <fcntl.h>
 
 /** Retains one private output descriptor until publication or cleanup. */
-typedef struct { int fd; char *path; char *error; } Output;
+typedef struct { int fd; char *path; char *error; gboolean preserve; } Output;
 static volatile sig_atomic_t received_signal;
 
 /** Records a signal using only signal-safe storage. */
@@ -87,10 +87,18 @@ failure:
     return 0;
 }
 
+/** Retains partial bytes on error and returns their borrowed path without claiming successful publication. */
+const char *sg_output_preserve(Output *o) {
+    if (!o || !o->path) return "";
+    o->preserve = TRUE;
+    if (o->fd >= 0) fsync(o->fd);
+    return o->path;
+}
+
 /** Closes the descriptor and removes only the private file created by this owner. */
 void sg_output_free(Output *o) {
     if (!o) return;
     if (o->fd >= 0) close(o->fd);
-    if (o->path) unlink(o->path);
+    if (o->path && !o->preserve) unlink(o->path);
     g_free(o->path); g_free(o->error); g_free(o);
 }

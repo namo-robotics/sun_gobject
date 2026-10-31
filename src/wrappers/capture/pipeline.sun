@@ -32,6 +32,9 @@ public module desktop {
     logical_height: i32
   ) i32;
 
+  /** Configures live camera placement relative to negotiated screen dimensions. */
+  extern "C" function sg_pipeline_presenter(p: raw_ptr<u8>, corner: i32, size: i32) i32;
+
   /** Installs caps probes and starts streaming. */
   extern "C" function sg_pipeline_play(p: raw_ptr<u8>) i32;
 
@@ -112,6 +115,15 @@ public module desktop {
         sg_pipeline_crop(this.pointer, x, y, width, height, logical_width, logical_height);
       } == 0) {
         return SystemResult.Error(Error(1, "The selected area is outside the shared screen"));
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Selects the live inset corner and size before the pipeline starts. */
+    public method presenter(corner: i32, size: i32) SystemResult<void> {
+      if (this.pointer == null or this.started or
+        unsafe { sg_pipeline_presenter(this.pointer, corner, size); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid live camera layout or pipeline state"));
       }
       return SystemResult.Ok;
     }
