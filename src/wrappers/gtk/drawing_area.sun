@@ -17,6 +17,19 @@ public module gtk {
       unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
     }
 
+    /** Explicitly retains an existing surface on the GTK thread. */
+    init(other: const ref DrawingArea) {
+      require_thread();
+      this.pointer = other.pointer;
+      unsafe { gobject.raw.g_object_ref(this.pointer); };
+    }
+
+    /** Tests native identity without exposing handles. */
+    public const method same(other: const ref DrawingArea) bool {
+      require_thread();
+      return this.pointer == other.pointer;
+    }
+
     /** Releases the widget; its callback releases the document when the final widget owner drops. */
     deinit() {
       require_thread();
