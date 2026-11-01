@@ -85,6 +85,16 @@ public module gtk {
       }
     }
 
+    /** Sets frames per second as a rational; zero numerator preserves time-based scrubbing. */
+    public method media_frame_rate(numerator: i64, denominator: i64) SystemResult<void> {
+      require_thread();
+      if (this.kind != 10 or
+        unsafe { sg_media_frame_rate(this.pointer, numerator, denominator); } == 0) {
+        return SystemResult.Error(Error(1, "Invalid video frame rate"));
+      }
+      return SystemResult.Ok;
+    }
+
     /** Applies a media source and trim range in microseconds, rejecting invalid bounds. */
     public method media(
       path: ref String,
@@ -112,6 +122,16 @@ public module gtk {
         return SystemResult.Error(Error(1, "Invalid media drag"));
       }
       unsafe { sg_media_drag(this.pointer, start, end); };
+      return SystemResult.Ok;
+    }
+
+    /** Drives one real arrow-key edit, rejecting directions other than previous or next. */
+    public method step_media(direction: i32) SystemResult<void> {
+      require_thread();
+      if (this.kind != 10 or (direction != -1 and direction != 1)) {
+        return SystemResult.Error(Error(1, "Invalid media step direction"));
+      }
+      unsafe { sg_media_step(this.pointer, direction); };
       return SystemResult.Ok;
     }
 

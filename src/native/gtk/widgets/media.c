@@ -14,9 +14,11 @@ typedef struct {
     GtkMediaStream *stream;
     char *path;
     gint64 duration, start, end, position, requested;
+    gint64 frame_rate_num, frame_rate_den;
     double origin;
     int handle;
     gboolean trim_controls;
+    gboolean stepping;
     GArray *ranges;
     gint64 range_id, emitted_position;
     int boundary;
@@ -26,6 +28,7 @@ typedef struct {
 /** Selects one kept interval for handle editing without changing playback position. */
 static void select_range(Media *media, guint index) {
     MediaRange *range = &g_array_index(media->ranges, MediaRange, index);
+    if (media->range_id != range->id) media->handle = 0;
     media->range_id = range->id; media->start = range->start; media->end = range->end;
 }
 /** Returns the active range index, or no selection for the legacy single interval. */
@@ -78,6 +81,7 @@ static void seek_to(Media *media, gint64 position) {
 static void stream_changed(GObject *object, GParamSpec *property, gpointer data) {
     (void)object;
     Media *media = data;
+    if (gtk_media_stream_get_playing(media->stream)) media->stepping = FALSE;
     const GError *error = gtk_media_stream_get_error(media->stream);
     if (error) {
         gtk_label_set_text(GTK_LABEL(media->notice), "Preview unavailable. Install GTK's GStreamer backend and codecs. Export still works.");
@@ -91,7 +95,8 @@ static void stream_changed(GObject *object, GParamSpec *property, gpointer data)
         seek_to(media, media->position);
     }
     if (!strcmp(property->name, "timestamp")) {
-        media->position = gtk_media_stream_get_timestamp(media->stream);
+        // Keep the requested frame while a paused decoder finishes asynchronous seeks.
+        if (!media->stepping) media->position = gtk_media_stream_get_timestamp(media->stream);
         if (gtk_media_stream_get_playing(media->stream)) {
             gint64 next = -1;
             if (media->ranges->len) {
@@ -115,6 +120,7 @@ static void toggle_play(GtkButton *button, gpointer data) {
     (void)button;
     Media *media = data;
     if (!media->stream || !gtk_media_stream_is_prepared(media->stream)) return;
+    media->stepping = FALSE;
     if (gtk_media_stream_get_playing(media->stream)) gtk_media_stream_pause(media->stream);
     else {
         if (media->ranges->len) {
@@ -160,7 +166,9 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
         for (int side = 0; side < 2; side++) {
             double x = time_x(media, side ? range.end : range.start);
             double direction = side ? -1 : 1;
-            cairo_set_source_rgb(cr, .34, .93, .82);
+            if (range.id == media->range_id && media->handle == side + 1)
+                cairo_set_source_rgb(cr, 1, .85, .35);
+            else cairo_set_source_rgb(cr, .34, .93, .82);
             cairo_rectangle(cr, side ? x - 4 : x, 23, 4, 54); cairo_fill(cr);
             cairo_move_to(cr, x, 40); cairo_line_to(cr, x + direction * 11, 50);
             cairo_line_to(cr, x, 60); cairo_close_path(cr); cairo_fill(cr);
@@ -172,7 +180,7 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
     cairo_move_to(cr, playhead - 5, 12); cairo_line_to(cr, playhead + 5, 12); cairo_line_to(cr, playhead, 19); cairo_close_path(cr); cairo_fill(cr);
 }
 /** Applies one pointer or keyboard edit with a positive minimum selection length. */
-static void edit_at(Media *media, gint64 value) {
+static void edit_at(Media *media, gint64 value, gboolean move_playhead) {
     if (media->duration <= 0 || !gtk_widget_is_sensitive(media->root)) return;
     int index = active_index(media);
     gint64 lower = index > 0 ? g_array_index(media->ranges, MediaRange, index - 1).end : 0;
@@ -190,7 +198,7 @@ static void edit_at(Media *media, gint64 value) {
         range->start = media->start; range->end = media->end;
     }
     if (media->stream) gtk_media_stream_pause(media->stream);
-    seek_to(media, value);
+    if (move_playhead) seek_to(media, value);
     emit_edit(media);
 }
 /** Chooses the nearest end handle or starts playhead scrubbing when the track is pressed. */
@@ -223,35 +231,66 @@ static void drag_begin(GtkGestureDrag *gesture, double x, double y, gpointer dat
             if (position >= range.start && position < range.end) { select_range(media, i); break; }
         }
     }
-    if (media->boundary < 0) edit_at(media, x_time(media, x));
+    if (media->boundary >= 0) {
+        double boundary = time_x(media, g_array_index(media->ranges, MediaRange, media->boundary).end);
+        select_range(media, (guint)(media->boundary + (x > boundary ? 1 : 0)));
+        media->handle = x > boundary ? 1 : 2;
+    }
+    // Selecting a bar must not move it or pull a separate playhead onto it.
+    if (!media->handle) {
+        media->stepping = FALSE;
+        edit_at(media, x_time(media, x), TRUE);
+    } else emit_edit(media);
+    refresh(media);
 }
 /** Continues a real drag using offsets from its original timeline coordinate. */
 static void drag_update(GtkGestureDrag *gesture, double x, double y, gpointer data) {
     (void)gesture; (void)y;
     Media *media = data;
+    if (fabs(x) < 1 && fabs(y) < 1) return;
     if (media->boundary >= 0) {
         if (fabs(x) < 1) return;
         select_range(media, (guint)(media->boundary + (x > 0 ? 1 : 0)));
         media->handle = x > 0 ? 1 : 2;
         media->boundary = -1;
     }
-    edit_at(media, x_time(media, media->origin + x));
+    media->stepping = FALSE;
+    edit_at(media, x_time(media, media->origin + x), TRUE);
 }
 /** Completes a drag using the same clamping rules as intermediate motion. */
 static void drag_end(GtkGestureDrag *gesture, double x, double y, gpointer data) {
     drag_update(gesture, x, y, data);
-    ((Media *)data)->handle = 0;
 }
-/** Supports arrow-key scrubbing, modified end-handle edits, and spacebar playback. */
+/** Finds an adjacent frame boundary without accumulating fractional-rate rounding errors. */
+static gint64 adjacent_frame(Media *media, gint64 current, int direction) {
+    if (!media->frame_rate_num)
+        return CLAMP(current + direction * (gint64)100000, (gint64)0, media->duration);
+    long double step = (long double)G_USEC_PER_SEC * media->frame_rate_den / media->frame_rate_num;
+    // Decoders may truncate timestamps where the controlled timeline rounds them.
+    long double tolerance = MIN(1.L, step / 4);
+    long double index = direction > 0 ? floorl((current + tolerance) / step) + 1
+                                      : ceill((current - tolerance) / step) - 1;
+    gint64 target = (gint64)roundl(MAX(0.L, index) * step);
+    // A playhead points at a frame, whereas an out point can end at the duration.
+    if (!media->handle && target >= media->duration)
+        target = (gint64)roundl(MAX(0.L, ceill((media->duration - .5L) / step) - 1) * step);
+    return CLAMP(target, (gint64)0, media->duration);
+}
+/** Steps the selected bar or playhead, moving them together only when they coincide. */
 static gboolean key_pressed(GtkEventControllerKey *controller, guint key, guint code, GdkModifierType modifiers, gpointer data) {
-    (void)controller; (void)code;
+    (void)controller; (void)code; (void)modifiers;
     Media *media = data;
     if (key == GDK_KEY_space) { toggle_play(NULL, media); return TRUE; }
     if (key != GDK_KEY_Left && key != GDK_KEY_Right) return FALSE;
-    media->handle = media->trim_controls ? (modifiers & GDK_SHIFT_MASK ? 1 : (modifiers & GDK_CONTROL_MASK ? 2 : 0)) : 0;
+    if (media->duration <= 0 || !gtk_widget_is_sensitive(media->root)) return FALSE;
     gint64 current = media->handle == 1 ? media->start : (media->handle == 2 ? media->end : media->position);
-    edit_at(media, current + (key == GDK_KEY_Left ? -100000 : 100000));
-    media->handle = 0;
+    gboolean together = !media->handle || llabs(media->position - current) <= 1;
+    gint64 target = adjacent_frame(media, current, key == GDK_KEY_Left ? -1 : 1);
+    media->stepping = TRUE;
+    if (media->stream) gtk_media_stream_pause(media->stream);
+    if ((media->handle == 1 && target >= media->end) ||
+        (media->handle == 2 && target <= media->start)) return TRUE;
+    edit_at(media, target, together);
     return TRUE;
 }
 /** Pauses playback when the owning preview leaves the visible widget tree. */
@@ -305,7 +344,7 @@ GtkWidget *sg_media_new(void) {
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(media->timeline), draw_timeline, media, NULL);
     gtk_widget_set_focusable(media->timeline, TRUE);
     gtk_widget_set_cursor_from_name(media->timeline, "ew-resize");
-    gtk_widget_set_tooltip_text(media->timeline, "Drag the mint handles to trim. Click to seek. Arrows: scrub; Shift+arrows: start; Ctrl+arrows: end; Space: play/pause.");
+    gtk_widget_set_tooltip_text(media->timeline, "Click a bar to select it; click the track to select the playhead. Arrows: step the selection by one frame; Space: play/pause.");
     gtk_accessible_update_property(GTK_ACCESSIBLE(media->timeline), GTK_ACCESSIBLE_PROPERTY_LABEL, "Video trim timeline", -1);
     gtk_box_append(GTK_BOX(media->root), media->timeline);
     media->drag = gtk_gesture_drag_new();
@@ -331,11 +370,20 @@ void sg_media_trim_controls(GtkWidget *widget, int enabled) {
     media->handle = 0;
     if (!enabled) { media->start = 0; media->end = media->duration; }
     gtk_widget_set_tooltip_text(media->timeline, enabled
-        ? "Drag the mint handles to trim. Click to seek. Arrows: scrub; Shift+arrows: start; Ctrl+arrows: end; Space: play/pause."
-        : "Click or drag to seek. Arrows: scrub; Space: play/pause.");
+        ? "Click a bar to select it; click the track to select the playhead. Arrows: step the selection by one frame; Space: play/pause."
+        : "Click or drag to seek. Arrows: step one frame; Space: play/pause.");
     gtk_accessible_update_property(GTK_ACCESSIBLE(media->timeline), GTK_ACCESSIBLE_PROPERTY_LABEL,
                                    enabled ? "Video trim timeline" : "Video playback timeline", -1);
     refresh(media);
+}
+int sg_media_frame_rate(GtkWidget *widget, gint64 numerator, gint64 denominator) {
+    sg_ui_require_main_thread();
+    Media *media = g_object_get_data(G_OBJECT(widget), "sun-media");
+    if (!media || numerator < 0 || numerator > 1000000000 || denominator <= 0 || denominator > 1000000000
+        || numerator > denominator * G_USEC_PER_SEC) return 0;
+    media->frame_rate_num = numerator;
+    media->frame_rate_den = denominator;
+    return 1;
 }
 void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 start, gint64 end, gint64 position) {
     sg_ui_require_main_thread();
@@ -344,6 +392,8 @@ void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 s
     gboolean changed = g_strcmp0(media->path, path) != 0;
     media->duration = duration; media->start = media->trim_controls ? start : 0; media->end = media->trim_controls ? end : duration;
     if (changed) {
+        media->handle = 0;
+        media->stepping = FALSE;
         if (media->stream) {
             g_signal_handler_disconnect(media->stream, media->notify);
             gtk_media_stream_pause(media->stream);
@@ -361,7 +411,10 @@ void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 s
             gtk_video_set_media_stream(GTK_VIDEO(media->video), media->stream);
         }
     }
-    if (changed || (position != media->requested && position != media->position)) seek_to(media, position);
+    if (changed || (position != media->requested && position != media->position)) {
+        media->stepping = FALSE;
+        seek_to(media, position);
+    }
     media->requested = position;
     refresh(media);
 }
@@ -397,6 +450,7 @@ int sg_media_ranges(GtkWidget *widget, const char *encoded, gint64 active) {
         (ranges->len && memcmp(ranges->data, media->ranges->data, ranges->len * sizeof(MediaRange)) != 0);
     if (changed && media->stream) gtk_media_stream_pause(media->stream);
     g_array_unref(media->ranges); media->ranges = ranges;
+    if (media->range_id != active) media->handle = 0;
     media->range_id = active;
     if (ranges->len) select_range(media, (guint)active_index(media));
     refresh(media);
@@ -419,6 +473,12 @@ void sg_media_drag(GtkWidget *widget, double from, double to) {
     g_signal_emit_by_name(media->drag, "drag-begin", first, 50.0);
     g_signal_emit_by_name(media->drag, "drag-update", last - first, 0.0);
     g_signal_emit_by_name(media->drag, "drag-end", last - first, 0.0);
+}
+void sg_media_step(GtkWidget *widget, int direction) {
+    sg_ui_require_main_thread();
+    Media *media = g_object_get_data(G_OBJECT(widget), "sun-media");
+    if (media && (direction == -1 || direction == 1))
+        key_pressed(NULL, direction < 0 ? GDK_KEY_Left : GDK_KEY_Right, 0, 0, media);
 }
 int sg_media_status(GtkWidget *widget) {
     sg_ui_require_main_thread();

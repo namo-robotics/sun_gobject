@@ -87,6 +87,13 @@ public module gtk {
   /** Selects whether the native timeline permits trim edits. */
   extern "C" function sg_media_trim_controls(widget: raw_ptr<u8>, enabled: i32) void;
 
+  /** Sets a checked rational frame rate for keyboard stepping. */
+  extern "C" function sg_media_frame_rate(
+    widget: raw_ptr<u8>,
+    numerator: i64,
+    denominator: i64
+  ) i32;
+
   /** Applies a validated local source and microsecond selection without emitting edits. */
   extern "C" function sg_media_set(
     widget: raw_ptr<u8>,
@@ -102,6 +109,9 @@ public module gtk {
 
   /** Exercises real gesture callbacks with normalized timeline positions. */
   extern "C" function sg_media_drag(widget: raw_ptr<u8>, start: f64, end: f64) void;
+
+  /** Exercises the native arrow handler in the requested direction. */
+  extern "C" function sg_media_step(widget: raw_ptr<u8>, direction: i32) void;
 
   /** Reports media preparation, failure, or playback state. */
   extern "C" function sg_media_status(widget: raw_ptr<u8>) i32;
