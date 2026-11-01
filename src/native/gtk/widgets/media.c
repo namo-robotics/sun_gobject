@@ -1,4 +1,5 @@
 #include "gtk/widgets/media.h"
+#include "gtk/widgets/view.h"
 #include "gtk/runtime/ui.h"
 #include <math.h>
 #include <string.h>
@@ -9,9 +10,11 @@ typedef struct { gint64 id, start, end; } MediaRange;
 
 /** Owns native media state; callbacks retain no Sun storage or application references. */
 typedef struct {
-    GtkWidget *root, *video, *timeline, *transport, *play, *clock, *notice, *events;
+    GtkWidget *root, *video, *timeline, *transport, *play, *back, *forward, *clock, *notice, *events, *revealer;
     GtkGesture *drag;
     GtkMediaStream *stream;
+    GdkSurface *surface;
+    gboolean hovered, controls_focused;
     char *path;
     gint64 duration, start, end, position, requested;
     gint64 frame_rate_num, frame_rate_den;
@@ -53,12 +56,90 @@ static gint64 x_time(Media *media, double x) {
     double width = MAX(64, gtk_widget_get_width(media->timeline));
     return (gint64)(CLAMP((x - 18) / (width - 36), 0.0, 1.0) * media->duration);
 }
+/** Keeps paused controls visible and fades them while playing outside the video. */
+static void refresh_controls(Media *media) {
+    gboolean playing = media->stream && gtk_media_stream_get_playing(media->stream);
+    gboolean show = !playing || media->hovered || media->controls_focused;
+    gtk_revealer_set_reveal_child(GTK_REVEALER(media->revealer), show);
+    gtk_widget_set_can_target(media->revealer, show);
+    const char *icon = playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic";
+    if (g_strcmp0(gtk_button_get_icon_name(GTK_BUTTON(media->play)), icon))
+        gtk_button_set_icon_name(GTK_BUTTON(media->play), icon);
+    const char *label = playing ? "Pause" : (media->trim_controls ? "Play selection" : "Play");
+    gtk_widget_set_tooltip_text(media->play, label);
+    gtk_accessible_update_property(GTK_ACCESSIBLE(media->play), GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
+}
+/** Reveals playback controls while the pointer is over the video. */
+static void video_enter(GtkEventControllerMotion *controller, double x, double y, gpointer data) {
+    (void)controller; (void)x; (void)y;
+    Media *media = data;
+    media->hovered = TRUE;
+    refresh_controls(media);
+}
+/** Fades playing controls when the pointer leaves the video. */
+static void video_leave(GtkEventControllerMotion *controller, gpointer data) {
+    (void)controller;
+    Media *media = data;
+    media->hovered = FALSE;
+    refresh_controls(media);
+}
+/** Keeps controls reachable while keyboard focus is inside the overlay. */
+static void controls_focus(GObject *object, GParamSpec *property, gpointer data) {
+    (void)property;
+    Media *media = data;
+    media->controls_focused = gtk_event_controller_focus_contains_focus(GTK_EVENT_CONTROLLER_FOCUS(object));
+    refresh_controls(media);
+}
+/** Associates the paintable stream with the picture's native surface. */
+static void video_realize(GtkWidget *widget, gpointer data) {
+    Media *media = data;
+    media->surface = g_object_ref(gtk_native_get_surface(gtk_widget_get_native(widget)));
+    if (media->stream) gtk_media_stream_realize(media->stream, media->surface);
+}
+/** Releases the stream's surface association before the picture is unrealized. */
+static void video_unrealize(GtkWidget *widget, gpointer data) {
+    (void)widget;
+    Media *media = data;
+    if (media->stream && media->surface) gtk_media_stream_unrealize(media->stream, media->surface);
+    g_clear_object(&media->surface);
+}
+/** Draws an outlined seek icon without relying on optional desktop icon themes. */
+static void draw_jump_icon(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
+    GdkRGBA color;
+    gtk_widget_get_color(GTK_WIDGET(area), &color);
+    gdk_cairo_set_source_rgba(cr, &color);
+    cairo_scale(cr, width / 32.0, height / 32.0);
+    if (GPOINTER_TO_INT(data) < 0) {
+        cairo_translate(cr, 32, 0);
+        cairo_scale(cr, -1, 1);
+    }
+    cairo_set_line_width(cr, 2.75);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    for (int side = 0; side < 2; side++) {
+        double x = 4 + side * 13;
+        cairo_move_to(cr, x, 6);
+        cairo_line_to(cr, x + 11, 16);
+        cairo_line_to(cr, x, 26);
+        cairo_close_path(cr);
+        cairo_stroke(cr);
+    }
+}
+/** Creates a theme-independent icon button matching the outlined play symbol. */
+static GtkWidget *jump_button(int direction) {
+    GtkWidget *button = gtk_button_new();
+    GtkWidget *icon = gtk_drawing_area_new();
+    gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(icon), 32);
+    gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(icon), 32);
+    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(icon), draw_jump_icon, GINT_TO_POINTER(direction), NULL);
+    gtk_button_set_child(GTK_BUTTON(button), icon);
+    return button;
+}
 /** Updates readouts and redraws independently of application rendering. */
 static void refresh(Media *media) {
     char *current = time_label(media->position), *end = time_label(media->duration);
     char *label = g_strdup_printf("%s  /  %s", current, end);
     gtk_label_set_text(GTK_LABEL(media->clock), label);
-    gtk_button_set_label(GTK_BUTTON(media->play), media->stream && gtk_media_stream_get_playing(media->stream) ? "Pause" : (media->trim_controls ? "Play selection" : "Play"));
+    refresh_controls(media);
     gtk_widget_queue_draw(media->timeline);
     g_free(current); g_free(end); g_free(label);
 }
@@ -87,10 +168,14 @@ static void stream_changed(GObject *object, GParamSpec *property, gpointer data)
         gtk_label_set_text(GTK_LABEL(media->notice), "Preview unavailable. Install GTK's GStreamer backend and codecs. Export still works.");
         gtk_widget_set_visible(media->notice, TRUE);
         gtk_widget_set_sensitive(media->play, FALSE);
+        gtk_widget_set_sensitive(media->back, FALSE);
+        gtk_widget_set_sensitive(media->forward, FALSE);
         return;
     }
     if (!strcmp(property->name, "prepared") && gtk_media_stream_is_prepared(media->stream)) {
         gtk_widget_set_sensitive(media->play, TRUE);
+        gtk_widget_set_sensitive(media->back, gtk_media_stream_is_seekable(media->stream));
+        gtk_widget_set_sensitive(media->forward, gtk_media_stream_is_seekable(media->stream));
         gtk_widget_set_visible(media->notice, FALSE);
         seek_to(media, media->position);
     }
@@ -135,6 +220,18 @@ static void toggle_play(GtkButton *button, gpointer data) {
         gtk_media_stream_play(media->stream);
     }
     refresh(media);
+}
+/** Jumps the playhead by a fixed interval without changing trim bounds or playback state. */
+static void jump_time(GtkButton *button, gpointer data) {
+    Media *media = data;
+    if (!media->stream || !gtk_media_stream_is_prepared(media->stream) ||
+        !gtk_media_stream_is_seekable(media->stream) || !gtk_widget_is_sensitive(media->root)) return;
+    gint64 delta = GTK_WIDGET(button) == media->back ? -15 * G_USEC_PER_SEC : 15 * G_USEC_PER_SEC;
+    media->handle = 0;
+    media->boundary = -1;
+    media->stepping = !gtk_media_stream_get_playing(media->stream);
+    seek_to(media, media->position + delta);
+    emit_edit(media);
 }
 /** Paints the track, excluded regions, selected interval, end handles, ticks, and playhead. */
 static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int height, gpointer data) {
@@ -182,6 +279,7 @@ static void draw_timeline(GtkDrawingArea *area, cairo_t *cr, int width, int heig
 /** Applies one pointer or keyboard edit with a positive minimum selection length. */
 static void edit_at(Media *media, gint64 value, gboolean move_playhead) {
     if (media->duration <= 0 || !gtk_widget_is_sensitive(media->root)) return;
+    gint64 previous = media->handle == 1 ? media->start : media->end;
     int index = active_index(media);
     gint64 lower = index > 0 ? g_array_index(media->ranges, MediaRange, index - 1).end : 0;
     gint64 upper = index >= 0 && (guint)(index + 1) < media->ranges->len
@@ -197,6 +295,8 @@ static void edit_at(Media *media, gint64 value, gboolean move_playhead) {
         MediaRange *range = &g_array_index(media->ranges, MediaRange, index);
         range->start = media->start; range->end = media->end;
     }
+    if (media->handle && media->position >= MIN(previous, value) &&
+        media->position <= MAX(previous, value)) move_playhead = TRUE;
     if (media->stream) gtk_media_stream_pause(media->stream);
     if (move_playhead) seek_to(media, value);
     emit_edit(media);
@@ -278,11 +378,17 @@ static gint64 adjacent_frame(Media *media, gint64 current, int direction) {
 }
 /** Steps the selected bar or playhead, moving them together only when they coincide. */
 static gboolean key_pressed(GtkEventControllerKey *controller, guint key, guint code, GdkModifierType modifiers, gpointer data) {
-    (void)controller; (void)code; (void)modifiers;
+    (void)code; (void)modifiers;
     Media *media = data;
-    if (key == GDK_KEY_space) { toggle_play(NULL, media); return TRUE; }
+    if (key == GDK_KEY_space) {
+        if (controller && !gtk_widget_is_focus(media->root) && !gtk_widget_is_focus(media->timeline))
+            return FALSE;
+        toggle_play(NULL, media);
+        return TRUE;
+    }
     if (key != GDK_KEY_Left && key != GDK_KEY_Right) return FALSE;
     if (media->duration <= 0 || !gtk_widget_is_sensitive(media->root)) return FALSE;
+    if (controller && !gtk_widget_is_focus(media->timeline)) media->handle = 0;
     gint64 current = media->handle == 1 ? media->start : (media->handle == 2 ? media->end : media->position);
     gboolean together = !media->handle || llabs(media->position - current) <= 1;
     gint64 target = adjacent_frame(media, current, key == GDK_KEY_Left ? -1 : 1);
@@ -292,6 +398,15 @@ static gboolean key_pressed(GtkEventControllerKey *controller, guint key, guint 
         (media->handle == 2 && target <= media->start)) return TRUE;
     edit_at(media, target, together);
     return TRUE;
+}
+/** Gives video clicks keyboard focus and selects the playhead without seeking or toggling playback. */
+static void video_pressed(GtkGestureClick *gesture, int count, double x, double y, gpointer data) {
+    (void)gesture; (void)count; (void)x; (void)y;
+    Media *media = data;
+    media->handle = 0;
+    media->boundary = -1;
+    gtk_widget_grab_focus(media->root);
+    refresh(media);
 }
 /** Pauses playback when the owning preview leaves the visible widget tree. */
 static void unmapped(GtkWidget *widget, gpointer data) {
@@ -318,10 +433,13 @@ GtkWidget *sg_media_new(void) {
     media->ranges = g_array_new(FALSE, FALSE, sizeof(MediaRange));
     media->boundary = -1;
     media->root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_focusable(media->root, TRUE);
     media->events = g_object_ref_sink(gtk_entry_new());
-    media->video = gtk_video_new();
-    gtk_video_set_autoplay(GTK_VIDEO(media->video), FALSE);
-    gtk_video_set_graphics_offload(GTK_VIDEO(media->video), GTK_GRAPHICS_OFFLOAD_DISABLED);
+    media->video = gtk_picture_new();
+    gtk_picture_set_content_fit(GTK_PICTURE(media->video), GTK_CONTENT_FIT_CONTAIN);
+    sg_view_style_priority(media->video, "* {background-color: black;}", GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    g_signal_connect(media->video, "realize", G_CALLBACK(video_realize), media);
+    g_signal_connect(media->video, "unrealize", G_CALLBACK(video_unrealize), media);
     GtkWidget *viewport = gtk_overlay_new();
     gtk_widget_set_size_request(viewport, 320, 280);
     gtk_widget_set_hexpand(viewport, TRUE);
@@ -330,15 +448,59 @@ GtkWidget *sg_media_new(void) {
     gtk_widget_set_valign(media->video, GTK_ALIGN_FILL);
     gtk_overlay_add_overlay(GTK_OVERLAY(viewport), media->video);
     gtk_box_append(GTK_BOX(media->root), viewport);
+    GtkGesture *video_click = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(video_click), GDK_BUTTON_PRIMARY);
+    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(video_click), GTK_PHASE_CAPTURE);
+    g_signal_connect(video_click, "pressed", G_CALLBACK(video_pressed), media);
+    gtk_widget_add_controller(viewport, GTK_EVENT_CONTROLLER(video_click));
     media->notice = gtk_label_new("Open a video to preview and trim it here");
     gtk_label_set_wrap(GTK_LABEL(media->notice), TRUE);
     gtk_box_append(GTK_BOX(media->root), media->notice);
     media->transport = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
-    media->play = gtk_button_new_with_label("Play selection");
+    media->play = gtk_button_new_from_icon_name("media-playback-start-symbolic");
+    media->back = jump_button(-1);
+    media->forward = jump_button(1);
+    gtk_widget_add_css_class(media->back, "sun-media-transport-button");
+    gtk_widget_add_css_class(media->play, "sun-media-transport-button");
+    gtk_widget_add_css_class(media->forward, "sun-media-transport-button");
+    gtk_widget_set_tooltip_text(media->back, "Jump back 15 seconds");
+    gtk_widget_set_tooltip_text(media->forward, "Jump forward 15 seconds");
+    gtk_accessible_update_property(GTK_ACCESSIBLE(media->back), GTK_ACCESSIBLE_PROPERTY_LABEL, "Jump back 15 seconds", -1);
+    gtk_accessible_update_property(GTK_ACCESSIBLE(media->forward), GTK_ACCESSIBLE_PROPERTY_LABEL, "Jump forward 15 seconds", -1);
+    gtk_widget_set_focus_on_click(media->play, FALSE);
+    gtk_widget_set_focus_on_click(media->back, FALSE);
+    gtk_widget_set_focus_on_click(media->forward, FALSE);
     gtk_widget_set_sensitive(media->play, FALSE);
+    gtk_widget_set_sensitive(media->back, FALSE);
+    gtk_widget_set_sensitive(media->forward, FALSE);
     media->clock = gtk_label_new("00:00.0 / 00:00.0");
-    gtk_box_append(GTK_BOX(media->transport), media->play); gtk_box_append(GTK_BOX(media->transport), media->clock);
-    gtk_box_append(GTK_BOX(media->root), media->transport);
+    gtk_box_append(GTK_BOX(media->transport), media->back);
+    gtk_box_append(GTK_BOX(media->transport), media->play);
+    gtk_box_append(GTK_BOX(media->transport), media->forward);
+    gtk_box_append(GTK_BOX(media->root), media->clock);
+    sg_view_style_priority(media->transport,
+        "* button.sun-media-transport-button { background-image: none; background-color: rgba(32,32,32,0.82); color: white;"
+        " border: none; border-radius: 9999px; padding: 16px;"
+        " min-width: 32px; min-height: 32px; -gtk-icon-size: 32px; box-shadow: none; }"
+        "* button.sun-media-transport-button:hover { background-color: rgba(64,64,64,0.92); }"
+        "* button.sun-media-transport-button:active { background-color: rgba(90,90,90,0.95); }"
+        "* button.sun-media-transport-button:focus-visible { outline: 2px solid #73e2cb; outline-offset: 2px; }"
+        "* button.sun-media-transport-button:disabled { background-color: rgba(32,32,32,0.6); color: #8a8a8a;"
+        " border-color: #34475d; opacity: 1; }", GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    media->revealer = gtk_revealer_new();
+    gtk_revealer_set_transition_type(GTK_REVEALER(media->revealer), GTK_REVEALER_TRANSITION_TYPE_CROSSFADE);
+    gtk_revealer_set_transition_duration(GTK_REVEALER(media->revealer), 180);
+    gtk_revealer_set_child(GTK_REVEALER(media->revealer), media->transport);
+    gtk_widget_set_halign(media->revealer, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(media->revealer, GTK_ALIGN_CENTER);
+    gtk_overlay_add_overlay(GTK_OVERLAY(viewport), media->revealer);
+    GtkEventController *motion = gtk_event_controller_motion_new();
+    g_signal_connect(motion, "enter", G_CALLBACK(video_enter), media);
+    g_signal_connect(motion, "leave", G_CALLBACK(video_leave), media);
+    gtk_widget_add_controller(viewport, motion);
+    GtkEventController *focus = gtk_event_controller_focus_new();
+    g_signal_connect(focus, "notify::contains-focus", G_CALLBACK(controls_focus), media);
+    gtk_widget_add_controller(media->transport, focus);
     media->timeline = gtk_drawing_area_new();
     gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(media->timeline), 108);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(media->timeline), draw_timeline, media, NULL);
@@ -353,11 +515,15 @@ GtkWidget *sg_media_new(void) {
     g_signal_connect(media->drag, "drag-end", G_CALLBACK(drag_end), media);
     gtk_widget_add_controller(media->timeline, GTK_EVENT_CONTROLLER(media->drag));
     GtkEventController *keys = gtk_event_controller_key_new();
+    gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
     g_signal_connect(keys, "key-pressed", G_CALLBACK(key_pressed), media);
-    gtk_widget_add_controller(media->timeline, keys);
+    gtk_widget_add_controller(media->root, keys);
     g_signal_connect(media->play, "clicked", G_CALLBACK(toggle_play), media);
+    g_signal_connect(media->back, "clicked", G_CALLBACK(jump_time), media);
+    g_signal_connect(media->forward, "clicked", G_CALLBACK(jump_time), media);
     g_signal_connect(media->root, "unmap", G_CALLBACK(unmapped), media);
     g_object_set_data_full(G_OBJECT(media->root), "sun-media", media, media_free);
+    refresh_controls(media);
     return media->root;
 }
 void sg_media_trim_controls(GtkWidget *widget, int enabled) {
@@ -366,7 +532,7 @@ void sg_media_trim_controls(GtkWidget *widget, int enabled) {
     if (!media || media->trim_controls == !!enabled) return;
     media->trim_controls = !!enabled;
     gtk_widget_set_visible(media->timeline, enabled);
-    gtk_widget_set_visible(media->transport, enabled);
+    gtk_widget_set_visible(media->transport, TRUE);
     media->handle = 0;
     if (!enabled) { media->start = 0; media->end = media->duration; }
     gtk_widget_set_tooltip_text(media->timeline, enabled
@@ -397,18 +563,22 @@ void sg_media_set(GtkWidget *widget, const char *path, gint64 duration, gint64 s
         if (media->stream) {
             g_signal_handler_disconnect(media->stream, media->notify);
             gtk_media_stream_pause(media->stream);
-            gtk_video_set_media_stream(GTK_VIDEO(media->video), NULL);
+            if (media->surface) gtk_media_stream_unrealize(media->stream, media->surface);
+            gtk_picture_set_paintable(GTK_PICTURE(media->video), NULL);
             g_clear_object(&media->stream);
         }
         g_free(media->path); media->path = g_strdup(path);
         media->position = position;
         gtk_widget_set_sensitive(media->play, FALSE);
+        gtk_widget_set_sensitive(media->back, FALSE);
+        gtk_widget_set_sensitive(media->forward, FALSE);
         gtk_widget_set_visible(media->notice, TRUE);
         gtk_label_set_text(GTK_LABEL(media->notice), *path ? "Loading preview..." : "Open a video to preview and trim it here");
         if (*path) {
             media->stream = GTK_MEDIA_STREAM(gtk_media_file_new_for_filename(path));
             media->notify = g_signal_connect(media->stream, "notify", G_CALLBACK(stream_changed), media);
-            gtk_video_set_media_stream(GTK_VIDEO(media->video), media->stream);
+            if (media->surface) gtk_media_stream_realize(media->stream, media->surface);
+            gtk_picture_set_paintable(GTK_PICTURE(media->video), GDK_PAINTABLE(media->stream));
         }
     }
     if (changed || (position != media->requested && position != media->position)) {

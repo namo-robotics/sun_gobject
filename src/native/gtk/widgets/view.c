@@ -243,6 +243,7 @@ typedef struct {
     GdkDisplay *display;
     GtkCssProvider *provider;
     char *source;
+    guint priority;
 } WidgetStyle;
 
 /** Removes a widget-specific provider before releasing its display reference. */
@@ -255,8 +256,11 @@ static void widget_style_free(gpointer data) {
     g_free(style);
 }
 gboolean sg_view_style(GtkWidget *widget, const char *css) {
+    return sg_view_style_priority(widget, css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+gboolean sg_view_style_priority(GtkWidget *widget, const char *css, guint priority) {
     WidgetStyle *current = g_object_get_data(G_OBJECT(widget), "sun-style");
-    if (current && !strcmp(current->source, css)) return TRUE;
+    if (current && current->priority == priority && !strcmp(current->source, css)) return TRUE;
     GtkCssProvider *provider = gtk_css_provider_new();
     char *name = g_strdup_printf("sun-node-%p", (void *)widget);
     char *selector = g_strconcat(".", name, NULL);
@@ -274,7 +278,8 @@ gboolean sg_view_style(GtkWidget *widget, const char *css) {
     style->display = g_object_ref(gtk_widget_get_display(widget));
     style->provider = provider;
     style->source = g_strdup(css);
-    gtk_style_context_add_provider_for_display(style->display, GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    style->priority = priority;
+    gtk_style_context_add_provider_for_display(style->display, GTK_STYLE_PROVIDER(provider), priority);
     g_object_set_data_full(G_OBJECT(widget), "sun-style", style, widget_style_free);
     return TRUE;
 }

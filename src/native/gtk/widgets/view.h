@@ -1,5 +1,7 @@
 #pragma once
 #include <gtk/gtk.h>
+/** Applies scoped widget styling at an explicit priority, retaining the provider until widget destruction. */
+gboolean sg_view_style_priority(GtkWidget *widget, const char *css, guint priority);
 /** Creates an independently owned box, grid, scroller, label, button, entry, checkbox, or select. */
 GtkWidget *sg_view_new(int kind);
 /** Updates validated text without generating application edit events. */
