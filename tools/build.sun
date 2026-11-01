@@ -64,6 +64,7 @@ module build_tasks {
       command.add_arg(word);
     }
     command.add_arg("-l:librsvg-2.so.2");
+    command.add_arg("-lm");
     return SystemResult.Ok;
   }
 
