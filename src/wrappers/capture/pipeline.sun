@@ -32,6 +32,9 @@ public module desktop {
     logical_height: i32
   ) i32;
 
+  /** Enables consumption of the stream's visible-window metadata. */
+  extern "C" function sg_pipeline_crop_window(p: raw_ptr<u8>) i32;
+
   /** Configures live camera placement relative to negotiated screen dimensions. */
   extern "C" function sg_pipeline_presenter(p: raw_ptr<u8>, corner: i32, size: i32) i32;
 
@@ -62,6 +65,14 @@ public module desktop {
       unsafe { sg_pipeline_free(this.pointer); };
       this.pointer = null;
       this.started = false;
+    }
+
+    /** Crops window padding before encoding; requires a named window_crop videocrop element. */
+    public method crop_window() SystemResult<void> {
+      if (this.started or unsafe { sg_pipeline_crop_window(this.pointer); } == 0) {
+        return SystemResult.Error(Error(1, "Configure window cropping before starting capture"));
+      }
+      return SystemResult.Ok;
     }
 
     /** Copies the latest native failure. */

@@ -321,7 +321,7 @@ with a hard link so an existing destination cannot be replaced.
 This bundle currently targets Linux. Area selection uses an X11 input grab and a
 hollow shaped outline within portal-provided monitor geometry; it rejects missing
 or unsupported geometry. It does not promise native Wayland area selection.
-Build dependencies are `gio-unix-2.0`, `gstreamer-1.0`, `x11`, and `xext` development
+Build dependencies are `gio-unix-2.0`, `gstreamer-1.0`, `gstreamer-video-1.0`, `x11`, and `xext` development
 packages. Runtime encoder plugins and a ScreenCast portal are supplied by the
 application's distribution package.
 
@@ -329,3 +329,9 @@ The regular Linux build includes `tests/capture.sun`. Tests run against a privat
 mock portal and Xvfb, covering response ordering, cancellation, denial, descriptor
 transfer, revocation, cleanup, and repeated live selection redraws. No real desktop
 frames are captured by these tests.
+
+Window recording pipelines call `Pipeline.crop_window()` with a `videocrop`
+element named `window_crop` directly after their source queue. The adapter consumes
+visible-window crop metadata before negotiating output size, preserving all pixels
+inside that rectangle. Missing metadata retains the full frame. Invalid rectangles
+fail capture; changes to recording dimensions are rejected by the existing layout guard.

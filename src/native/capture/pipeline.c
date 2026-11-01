@@ -1,5 +1,6 @@
 /** Adapts GStreamer streaming-thread caps and bus messages to an owned polling API. */
 #include <gst/gst.h>
+#include <gst/video/video.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -11,9 +12,74 @@ typedef struct {
     char *error;
     int x, y, width, height, logical_width, logical_height;
     int frame_width, frame_height;
+    GstCaps *window_caps;
+    GstEvent *window_segment;
+    gboolean forwarding_window_events, window_started, crop_window;
     GMutex layout_lock;
     int screen_width, screen_height, camera_width, camera_height, corner, size;
 } Pipeline;
+
+/** Applies the visible rectangle before downstream caps fix the recording canvas. */
+static GstPadProbeReturn window_probe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
+    Pipeline *p = data;
+    if (GST_PAD_PROBE_INFO_TYPE(info) & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) {
+        if (p->forwarding_window_events) return GST_PAD_PROBE_OK;
+        GstEvent *event = GST_PAD_PROBE_INFO_EVENT(info);
+        if (GST_EVENT_TYPE(event) == GST_EVENT_CAPS) {
+            GstCaps *caps;
+            gst_event_parse_caps(event, &caps);
+            gst_caps_replace(&p->window_caps, caps);
+            p->window_started = FALSE;
+            return GST_PAD_PROBE_DROP;
+        }
+        if (GST_EVENT_TYPE(event) == GST_EVENT_SEGMENT && !p->window_started) {
+            gst_event_replace(&p->window_segment, event);
+            return GST_PAD_PROBE_DROP;
+        }
+        return GST_PAD_PROBE_OK;
+    }
+    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+    GstVideoCropMeta *crop = gst_buffer_get_video_crop_meta(buffer);
+    int width = 0, height = 0;
+    if (p->window_caps) {
+        const GstStructure *caps = gst_caps_get_structure(p->window_caps, 0);
+        gst_structure_get_int(caps, "width", &width);
+        gst_structure_get_int(caps, "height", &height);
+    }
+    guint x = crop ? crop->x : 0, y = crop ? crop->y : 0;
+    guint w = crop ? crop->width : (guint)MAX(width, 0);
+    guint h = crop ? crop->height : (guint)MAX(height, 0);
+    GstElement *element = gst_bin_get_by_name(GST_BIN(p->pipeline), "window_crop");
+    if (width <= 0 || height <= 0 || !w || !h ||
+        (guint64)x + w > (guint)width || (guint64)y + h > (guint)height) {
+        GST_ELEMENT_ERROR(element, STREAM, FORMAT, ("Invalid visible window rectangle"), (NULL));
+        gst_object_unref(element);
+        return GST_PAD_PROBE_DROP;
+    }
+    g_object_set(element, "left", (int)x, "top", (int)y,
+        "right", width - (int)(x + w), "bottom", height - (int)(y + h), NULL);
+    gst_object_unref(element);
+    // Consume the metadata so videocrop does not add its offsets a second time.
+    if (crop) {
+        buffer = gst_buffer_make_writable(buffer);
+        GST_PAD_PROBE_INFO_DATA(info) = buffer;
+        crop = gst_buffer_get_video_crop_meta(buffer);
+        gst_buffer_remove_meta(buffer, &crop->meta);
+    }
+    if (!p->window_started) {
+        p->forwarding_window_events = TRUE;
+        gboolean ok = gst_pad_push_event(pad, gst_event_new_caps(p->window_caps));
+        if (ok && p->window_segment) {
+            GstEvent *segment = p->window_segment;
+            p->window_segment = NULL;
+            ok = gst_pad_push_event(pad, segment);
+        }
+        p->forwarding_window_events = FALSE;
+        if (!ok) return GST_PAD_PROBE_DROP;
+        p->window_started = TRUE;
+    }
+    return GST_PAD_PROBE_OK;
+}
 
 /** Fixes the output canvas and camera rectangle from negotiated source dimensions. */
 static GstPadProbeReturn layout_probe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
@@ -68,6 +134,18 @@ static GstPadProbeReturn layout_probe(GstPad *pad, GstPadProbeInfo *info, gpoint
 int sg_pipeline_presenter(Pipeline *p, int corner, int size) {
     if (!p || corner < 0 || corner > 3 || size < 0 || size > 2) return 0;
     p->corner = corner; p->size = size; return 1;
+}
+
+/** Enables visible-window metadata handling before the pipeline starts. */
+int sg_pipeline_crop_window(Pipeline *p) {
+    if (!p || !p->pipeline) return 0;
+    GstElement *crop = gst_bin_get_by_name(GST_BIN(p->pipeline), "window_crop");
+    if (!crop) return 0;
+    GstElementFactory *factory = gst_element_get_factory(crop);
+    int valid = factory && g_str_equal(gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)), "videocrop");
+    gst_object_unref(crop);
+    p->crop_window = valid;
+    return valid;
 }
 
 /** Checks caps before buffers pass downstream; no application callbacks run on this thread. */
@@ -164,6 +242,20 @@ int sg_pipeline_crop(Pipeline *p, int x, int y, int width, int height, int logic
 /** Installs native caps guards and starts an already configured pipeline. */
 int sg_pipeline_play(Pipeline *p) {
     if (!p->pipeline || p->error) return 0;
+    GstElement *window = p->crop_window ? gst_bin_get_by_name(GST_BIN(p->pipeline), "window_crop") : NULL;
+    if (window) {
+        GstElementFactory *factory = gst_element_get_factory(window);
+        if (!factory || !g_str_equal(gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)), "videocrop")) {
+            gst_object_unref(window); return 0;
+        }
+        GstPad *sink = gst_element_get_static_pad(window, "sink");
+        GstPad *pad = gst_pad_get_peer(sink);
+        gst_object_unref(sink);
+        if (!pad) { gst_object_unref(window); return 0; }
+        gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM | GST_PAD_PROBE_TYPE_BUFFER,
+            window_probe, p, NULL);
+        gst_object_unref(pad); gst_object_unref(window);
+    }
     const char *names[] = {"region", "encoder"};
     for (int i = 0; i < 2; ++i) {
         GstElement *element = gst_bin_get_by_name(GST_BIN(p->pipeline), names[i]);
@@ -239,6 +331,8 @@ void sg_pipeline_free(Pipeline *p) {
     gst_clear_object(&p->bus); gst_clear_object(&p->pipeline);
     if (p->output_fd >= 0) close(p->output_fd);
     if (p->remote_fd >= 0) close(p->remote_fd);
+    gst_clear_caps(&p->window_caps);
+    gst_clear_event(&p->window_segment);
     g_mutex_clear(&p->layout_lock);
     g_free(p->error); g_free(p);
 }
