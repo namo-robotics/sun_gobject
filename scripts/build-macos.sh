@@ -119,3 +119,5 @@ if [[ ${1:-} == --bundles ]]; then
 fi
 run_tests
 package_release
+./scripts/package-sun.sh
+cp build/sun_gobject-arm64-apple-darwin.tar.gz build/release/

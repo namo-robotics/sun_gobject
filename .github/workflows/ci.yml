@@ -38,12 +38,12 @@ jobs:
             build/generated/coverage.tsv
             build/test-results.log
       - name: Package tested Linux development bundles
-        run: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev sun tools/package.sun
+        run: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspaces/sun_gobject" sun-gobject-dev bash scripts/package-linux.sh
       - uses: actions/upload-artifact@v4
         with:
           name: sun-gobject-linux-release
           if-no-files-found: error
-          path: build/sun-gobject_0.dev_amd64.deb
+          path: build/release/
   publish:
     needs: linux
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -62,7 +62,10 @@ jobs:
           name: Development Build
           prerelease: true
           fail_on_unmatched_files: true
-          files: build/release/*.deb
+          files: |
+            build/release/*.deb
+            build/release/*.moon
+            build/release/*.sun.tar.gz
   macos:
     runs-on: macos-latest
     steps:
@@ -75,7 +78,7 @@ jobs:
         with:
           name: sun_gobject-macos-arm64
           if-no-files-found: error
-          path: build/sun_gobject-arm64-apple-darwin.tar.gz
+          path: build/release/
   publish-macos:
     needs: macos
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -94,4 +97,7 @@ jobs:
           name: Development Build
           prerelease: true
           fail_on_unmatched_files: true
-          files: build/release/sun_gobject-arm64-apple-darwin.tar.gz
+          files: |
+            build/release/sun_gobject-arm64-apple-darwin.tar.gz
+            build/release/*.moon
+            build/release/*.sun.tar.gz
