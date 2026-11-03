@@ -1,33 +1,123 @@
 {
   "root": true,
   "sun_fmt": {
-    "ignore": ["src/generated/**", "tests/fixtures/**"]
+    "ignore": [
+      "src/generated/**",
+      "tests/fixtures/**"
+    ]
   },
-  "sun_path": [
-    "$SUN_GOBJECT_BUILD"
-  ],
   "path_variables": {
     "SUN_GOBJECT_BUILD": "build"
   },
   "entrypoints": [
     {
-      "name": "gir-generator",
+      "name": "sun_gobject",
+      "path": "src/sun_gobject.sun",
+      "type": "library",
+      "export": true
+    },
+    {
+      "name": "sun_gtk",
+      "path": "src/sun_gtk.sun",
+      "type": "library",
+      "export": true,
+      "requires": [
+        "sun_gobject"
+      ],
+      "steps": [
+        "native"
+      ],
+      "resources": [
+        {
+          "path": "${SUN_BUILD}/native/libsun_gobject_native.a",
+          "destination": "lib/native/libsun_gobject_native.a"
+        }
+      ]
+    },
+    {
+      "name": "sun_capture",
+      "path": "src/sun_capture.sun",
+      "type": "library",
+      "export": true,
+      "requires": [
+        "sun_gobject"
+      ],
+      "steps": [
+        "native"
+      ],
+      "enabled": {
+        "default": false,
+        "target": {
+          "x86_64-linux-gnu": true,
+          "x86_64-linux-musl": true
+        }
+      },
+      "resources": [
+        {
+          "path": "${SUN_BUILD}/native/libsun_capture_native.a",
+          "destination": "lib/native/libsun_capture_native.a"
+        }
+      ]
+    },
+    {
+      "name": "sun_gir",
       "path": "src/generator/main.sun",
-      "type": "binary",
-      "output_name": "build/sun-gir"
+      "type": "binary"
     },
     {
-      "name": "tests",
+      "name": "sun_gobject_tests",
       "path": "tests/main.sun",
-      "type": "binary",
-      "output_name": "build/sun-gobject-tests",
-      "test_binary_name": "build/sun-gobject-tests_test"
+      "type": "binary"
     },
     {
-      "name": "package-tool",
+      "name": "release_package_tool",
       "path": "tools/package.sun",
-      "type": "binary",
-      "output_name": "build/release-package-tool"
+      "type": "binary"
+    }
+  ],
+  "package_id": "namo-robotics/sun_gobject",
+  "steps": [
+    {
+      "name": "native_configure",
+      "command": [
+        "cmake",
+        "-S",
+        "src/native",
+        "-B",
+        "${SUN_BUILD}/native",
+        "-DBUILD_TESTING=OFF"
+      ],
+      "inputs": [
+        "src/native/CMakeLists.txt"
+      ],
+      "outputs": [
+        "${SUN_BUILD}/native/CMakeCache.txt"
+      ]
+    },
+    {
+      "name": "native",
+      "requires": [
+        "native_configure"
+      ],
+      "command": [
+        "cmake",
+        "--build",
+        "${SUN_BUILD}/native",
+        "-j",
+        "${SUN_JOBS}"
+      ],
+      "inputs": [
+        "src/native"
+      ],
+      "outputs": [
+        "${SUN_BUILD}/native/libsun_gobject_native.a"
+      ]
+    }
+  ],
+  "exports": [
+    {
+      "path": "LICENSE",
+      "destination": "share/sun_gobject/LICENSE"
     }
   ]
 }

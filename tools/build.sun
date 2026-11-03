@@ -43,6 +43,9 @@ module build_tasks {
     var executable = compiler();
     var command = std.process.Command(a, executable);
     command.add_arg("--dynamic");
+    // This test harness explicitly keeps its native fixtures in build/.
+    command.add_arg("--path-var");
+    command.add_arg("SUN_BUILD=build");
     command.add_arg("--lib-path");
     command.add_arg("build");
     if (native) {
@@ -159,7 +162,7 @@ module build_tasks {
     probe.add_arg("--dynamic");
     probe.add_arg("-c");
     probe.add_arg("-o");
-    probe.add_arg("build/xml-probe");
+    probe.add_arg("build/xml_probe");
     probe.add_arg("tools/xml_probe.sun");
     if (try probe.status() != 0) {
       return SystemResult.Error(
@@ -169,7 +172,7 @@ module build_tasks {
         )
       );
     }
-    var check = std.process.Command(a, "build/xml-probe");
+    var check = std.process.Command(a, "build/xml_probe");
     return run(check);
   }
 
@@ -183,7 +186,7 @@ module build_tasks {
     generator.add_arg("-lglib-2.0");
     generator.add_arg("-c");
     generator.add_arg("-o");
-    generator.add_arg("build/sun-gir");
+    generator.add_arg("build/sun_gir");
     generator.add_arg("src/generator/main.sun");
     try run(generator);
     var revision_command = std.process.Command(a, "git");
@@ -205,7 +208,7 @@ module build_tasks {
     revision.append(":sources-sha256=");
     revision.append(words[0]);
     println("Generating bindings");
-    var generate = std.process.Command(a, "build/sun-gir");
+    var generate = std.process.Command(a, "build/sun_gir");
     generate.add_arg("--selection");
     generate.add_arg("src/bindings/selection.xml");
     generate.add_arg("--overrides");
@@ -258,7 +261,7 @@ module build_tasks {
     capture_tests.add_arg("--force-rebuild");
     capture_tests.add_arg("-c");
     capture_tests.add_arg("-o");
-    capture_tests.add_arg("build/capture-tests");
+    capture_tests.add_arg("build/capture_tests");
     capture_tests.add_arg("tests/capture.sun");
     try run(capture_tests);
     println("Compiling GTK demo");
@@ -301,11 +304,11 @@ module build_tasks {
     try link_gtk(tests);
     tests.add_arg("-c");
     tests.add_arg("-o");
-    tests.add_arg("build/sun-gobject-tests");
+    tests.add_arg("build/sun_gobject_tests");
     try native_dependency(
       tests,
       "build/native/libsun_gobject_test_support.a",
-      "build/sun-gobject-tests"
+      "build/sun_gobject_tests"
     );
     tests.add_arg("tests/main.sun");
     try run(tests);
@@ -339,7 +342,7 @@ module build_tasks {
     try run(bundles);
     var generator = std.process.Command(a, "install");
     generator.add_arg("-m755");
-    generator.add_arg("build/sun-gir");
+    generator.add_arg("build/sun_gir");
     generator.add_arg(bin);
     try run(generator);
     return SystemResult.Ok;
@@ -389,7 +392,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
       }
     };
     println("Running Sun tests");
-    var tests = std.process.Command(a, "build/sun-gobject-tests_test");
+    var tests = std.process.Command(a, "build/sun_gobject_tests_test");
     // Separate Xvfb launchers must not compete for display numbers.
     tests.add_arg("--test-sequential");
     match tests.status() {
@@ -401,7 +404,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
         capture_tests.add_arg("--");
         capture_tests.add_arg("xvfb-run");
         capture_tests.add_arg("-a");
-        capture_tests.add_arg("build/capture-tests_test");
+        capture_tests.add_arg("build/capture_tests_test");
         capture_tests.add_arg("--test-sequential");
         return match capture_tests.status() {
           SystemResult.Ok(code) => code,

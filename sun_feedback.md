@@ -10,7 +10,7 @@ until an upstream fix is verified in the compiler used by this project.
 - **Status/link:** Open — [sun#383](https://github.com/namo-robotics/sun/issues/383).
 - **Use case:** Consume GObject Introspection XML entirely in Sun, including namespace
   resolution, UTF-8, entities, attributes, text, comments, and CDATA.
-- **Reproduction:** Build this repository and run `build/sun-gir --check-xml tests/fixtures/xml-valid.xml`.
+- **Reproduction:** Build this repository and run `build/sun_gir --check-xml tests/fixtures/xml-valid.xml`.
   The application currently needs the reader in `generator/xml.sun`; there is no
   XML reader in the inspected standard library.
 - **Expected:** A reusable streaming or indexed XML reader with structured
