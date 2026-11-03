@@ -10,11 +10,13 @@ case "$(uname -s)-$(uname -m)" in
 esac
 
 "$compiler" build --config sun-config.json --target "$target" --dynamic
+build_root=$("$compiler" describe --config sun-config.json --target "$target" --dynamic --field build_root)
+package_dir="$build_root/packages/sun_gobject"
 mkdir -p build/release
-cp dist/sun_gobject.tar.gz "build/release/sun_gobject-$target.sun.tar.gz"
+cp "$package_dir.tar.gz" "build/release/sun_gobject-$target.sun.tar.gz"
 for name in sun_gobject sun_gtk; do
-  cp "dist/sun_gobject/lib/$name.moon" "build/release/$name-$target.moon"
+  cp "$package_dir/lib/$name.moon" "build/release/$name-$target.moon"
 done
 if [[ $target == x86_64-linux-gnu ]]; then
-  cp dist/sun_gobject/lib/sun_capture.moon "build/release/sun_capture-$target.moon"
+  cp "$package_dir/lib/sun_capture.moon" "build/release/sun_capture-$target.moon"
 fi

@@ -130,14 +130,6 @@
       ],
       "resources": [
         {
-          "path": "LICENSE",
-          "destination": "share/sun_gobject/LICENSE"
-        },
-        {
-          "path": "build/sun-version.txt",
-          "destination": "share/sun_gobject/sun-version.txt"
-        },
-        {
           "path": "build/native/native-versions.txt",
           "destination": "share/sun_gobject/native-versions.txt"
         },
@@ -145,8 +137,7 @@
           "path": "build/generated/provenance.json",
           "destination": "share/sun_gobject/provenance.json"
         }
-      ],
-      "output_name": "dist/sun_gobject"
+      ]
     }
   ]
 }

@@ -29,8 +29,7 @@ adapter archives; system GTK, librsvg, and capture dependencies are still requir
 
 Use individual Moon URLs with a `library` dependency selector, or the
 `.sun.tar.gz` URL as a whole-package dependency. The Sun archive contains
-`package.json`, the library inventory with SHA-256 hashes, the license, and build
-provenance. The `packages` section in `sun-config.json` describes this distribution.
+`package.json`, the library inventory with SHA-256 hashes, and build provenance. The `packages` section in `sun-config.json` describes this distribution.
 `./scripts/package-sun.sh` runs `sun build` to build the exported libraries and
 assemble their Sun package, then copies its artifacts to the release directory.
 The Debian package and legacy macOS installation archive remain available.
