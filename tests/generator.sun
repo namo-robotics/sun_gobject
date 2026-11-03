@@ -7,7 +7,7 @@ module generator_tests {
   function generate(fixture: ref checks.Fixture) checks.Result<std.process.Output> {
     return checks.command(
       fixture,
-      "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun-gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture"
+      "selection=\"$4/tests/fixtures/selection.xml\"; if [ -f \"$1/selection.xml\" ]; then selection=\"$1/selection.xml\"; fi; exec \"$2/sun_gir\" --selection \"$selection\" --gir-dir \"$1\" --gir-dir \"$4/tests/fixtures\" --output-dir \"$1\" --target x86_64-linux-gnu --sun-revision fixture --generator-revision fixture"
     );
   }
 
@@ -27,7 +27,7 @@ module generator_tests {
   ) checks.Result<void> {
     var path = fixture.file("input.xml");
     try checks.write(path, content);
-    var output = try checks.command(fixture, "exec \"$2/sun-gir\" --check-xml \"$1/input.xml\"");
+    var output = try checks.command(fixture, "exec \"$2/sun_gir\" --check-xml \"$1/input.xml\"");
     try std.test.assert_eq(output.status() == 0, accepted);
     if (accepted == false) {
       var diagnostic: ref String = output.stderr();
