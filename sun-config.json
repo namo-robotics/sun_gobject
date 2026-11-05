@@ -30,7 +30,7 @@
       "resources": [
         {
           "path": "${SUN_BUILD}/native/libsun_gobject_native.a",
-          "destination": "lib/native/libsun_gobject_native.a"
+          "destination": "native/libsun_gobject_native.a"
         }
       ]
     },
@@ -55,7 +55,7 @@
       "resources": [
         {
           "path": "${SUN_BUILD}/native/libsun_capture_native.a",
-          "destination": "lib/native/libsun_capture_native.a"
+          "destination": "native/libsun_capture_native.a"
         }
       ]
     },
