@@ -19,7 +19,7 @@ sun_flags=(--dynamic --lib-path build)
 
 # Build native libraries and regenerate the Sun bundles for Apple Silicon.
 build_bundles() {
-  mkdir -p build/generated src/generated tmp
+  mkdir -p build/generated build/generated/sources tmp
   "${compiler[@]}" tools/build.sun -- prepare
   cmake -S src/native -B build/native \
     -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
@@ -39,7 +39,7 @@ build_bundles() {
   build/sun_gir \
     --selection src/bindings/selection.xml \
     --overrides src/bindings/overrides.xml \
-    --output-dir build/generated --source-dir src/generated \
+    --output-dir build/generated --source-dir build/generated/sources \
     --target arm64-apple-darwin \
     --gir-dir "${SUN_GTK_PREFIX:-$(brew --prefix gtk4)}/share/gir-1.0" \
     --gir-dir "$(brew --prefix glib)/share/gir-1.0" \

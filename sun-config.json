@@ -3,6 +3,8 @@
   "sun_fmt": {
     "ignore": [
       "src/generated/**",
+      "build/**",
+      ".sun/**",
       "tests/fixtures/**"
     ]
   },
@@ -14,7 +16,10 @@
       "name": "sun_gobject",
       "path": "src/sun_gobject.sun",
       "type": "library",
-      "export": true
+      "export": true,
+      "build": [
+        "scripts/build-configured-library.sh"
+      ]
     },
     {
       "name": "sun_gtk",
@@ -130,11 +135,11 @@
       ],
       "resources": [
         {
-          "path": "build/native/native-versions.txt",
+          "path": "${SUN_BUILD}/native/native-versions.txt",
           "destination": "share/sun_gobject/native-versions.txt"
         },
         {
-          "path": "build/generated/provenance.json",
+          "path": "${SUN_BUILD}/generated/provenance.json",
           "destination": "share/sun_gobject/provenance.json"
         }
       ]

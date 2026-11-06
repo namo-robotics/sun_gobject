@@ -122,7 +122,7 @@ module build_tasks {
     var mkdir = std.process.Command(a, "mkdir");
     mkdir.add_arg("-p");
     mkdir.add_arg("build/generated");
-    mkdir.add_arg("src/generated");
+    mkdir.add_arg("build/generated/sources");
     mkdir.add_arg("tmp");
     try run(mkdir);
     var pwd = std.process.Command(a, "pwd");
@@ -216,7 +216,7 @@ module build_tasks {
     generate.add_arg("--output-dir");
     generate.add_arg("build/generated");
     generate.add_arg("--source-dir");
-    generate.add_arg("src/generated");
+    generate.add_arg("build/generated/sources");
     generate.add_arg("--target");
     generate.add_arg("x86_64-linux-gnu");
     generate.add_arg("--sun-revision");

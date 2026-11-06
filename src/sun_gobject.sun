@@ -2,9 +2,9 @@
 manifest {
   id: "namo-robotics/sun_gobject"
   source_files: [
-    "generated/glib.sun",
-    "generated/gobject.sun",
-    "generated/gio.sun",
+    "${SUN_BUILD}/generated/sources/glib.sun",
+    "${SUN_BUILD}/generated/sources/gobject.sun",
+    "${SUN_BUILD}/generated/sources/gio.sun",
     "wrappers/core.sun"
   ]
   libraries: [

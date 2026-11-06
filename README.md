@@ -221,7 +221,7 @@ src/
 | --- | --- |
 | [`src/bindings/`](src/bindings/) | Select declarations and correct GIR metadata through reviewed XML. |
 | [`src/generator/`](src/generator/) | Read GIR metadata and configuration, validate supported ABI types, and emit Sun declarations. |
-| `src/generated/` | Hold generator output using the existing `*.raw` modules. Do not hand-edit these files. |
+| `build/generated/sources/` | Hold generator output using the existing `*.raw` modules. Do not hand-edit these files. |
 | [`src/wrappers/`](src/wrappers/) | Provide checked Sun ownership and convenience APIs. Handwritten `extern "C"` declarations stay beside their consumers and use Sun's existing FFI features. |
 | [`src/native/gobject/`](src/native/gobject/) | Adapt native signals and verify layouts that the wrappers rely on. |
 | [`src/native/gtk/runtime/`](src/native/gtk/runtime/) | Own native event storage, thread checks, and source lifetimes. |
@@ -238,7 +238,7 @@ these files does not move that behavior into another repository.
 
 Bundle manifests are maintained in `src/sun_gobject.sun` and `src/sun_gtk.sun`.
 Update their source lists when adding or moving binding files. Generated Sun
-bindings live in `src/generated/` and are ignored by Git. Reports live in
+bindings live in `build/generated/sources/` and are ignored by Git. Reports live in
 `build/generated/`; native build artifacts live in
 `build/native/`. Reports include `coverage.tsv`, `gir-model.json`, and
 `provenance.json`, which records compiler, generator, configuration, and GIR input
@@ -349,3 +349,5 @@ element named `window_crop` directly after their source queue. The adapter consu
 visible-window crop metadata before negotiating output size, preserving all pixels
 inside that rectangle. Missing metadata retains the full frame. Invalid rectangles
 fail capture; changes to recording dimensions are rejected by the existing layout guard.
+
+Configured builds (`sun build --config sun-config.json`) generate bindings beneath `${SUN_BUILD}/generated/sources` before building the GLib and GTK libraries. The GIR generator runs on the host and emits declarations for the selected target. Git dependencies use the same pipeline without pre-generated files in their checkouts.

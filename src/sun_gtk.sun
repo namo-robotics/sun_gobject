@@ -5,7 +5,7 @@ manifest {
   ]
   id: "namo-robotics/sun_gtk"
   source_files: [
-    "generated/gtk.sun",
+    "${SUN_BUILD}/generated/sources/gtk.sun",
     "wrappers/gtk/support.sun",
     "wrappers/gtk/widget_support.sun",
     "wrappers/gtk/widget.sun",
