@@ -31,6 +31,50 @@ if [[ $(uname -s) == Darwin ]]; then
     if [[ -d $directory ]]; then arguments+=(--gir-dir "$directory"); fi
   done
 fi
-"$SUN_BUILD/host/sun_gir" "${arguments[@]}"
+# Hash file contents so timestamp-only changes do not regenerate bindings.
+if command -v sha256sum >/dev/null; then
+  hash_command=(sha256sum)
+else
+  hash_command=(shasum -a 256)
+fi
+
+# Include every GIR search directory, including added or removed metadata files.
+gir_directories=(/usr/share/gir-1.0)
+if [[ $target == x86_64-linux-gnu ]]; then
+  gir_directories+=(/usr/lib/x86_64-linux-gnu/gir-1.0)
+fi
+for ((i = 0; i < ${#arguments[@]}; i++)); do
+  if [[ ${arguments[i]} == --gir-dir ]]; then
+    gir_directories+=("${arguments[i + 1]}")
+  fi
+done
+
+# Fingerprint the generator, recipe, options, selection, overrides, and GIR inputs.
+generation_inputs() {
+  printf '%s\n' "${arguments[@]}"
+  "${hash_command[@]}" "${BASH_SOURCE[0]}" "$SUN_BUILD/host/sun_gir" \
+    src/bindings/selection.xml src/bindings/overrides.xml || return
+  for directory in "${gir_directories[@]}"; do
+    if [[ -d $directory ]]; then
+      find -L "$directory" -type f -name '*.gir' -exec "${hash_command[@]}" {} + | LC_ALL=C sort || return
+    fi
+  done
+}
+
+# Verify generated files too, so deleting or editing an output triggers repair.
+generation_outputs() {
+  find "$SUN_BUILD/generated" -type f -exec "${hash_command[@]}" {} + | LC_ALL=C sort
+}
+
+stamp="$SUN_BUILD/host/gir-generation.sha256"
+inputs=$(generation_inputs | "${hash_command[@]}")
+outputs=$(generation_outputs | "${hash_command[@]}")
+if [[ -f $stamp && $(cat "$stamp") == "$inputs"$'\n'"$outputs" ]]; then
+  echo "[sun][info]: Up to date: GIR bindings"
+else
+  "$SUN_BUILD/host/sun_gir" "${arguments[@]}"
+  outputs=$(generation_outputs | "${hash_command[@]}")
+  printf '%s\n%s\n' "$inputs" "$outputs" > "$stamp"
+fi
 
 exec "$SUN_EXECUTABLE" build-compile

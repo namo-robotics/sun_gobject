@@ -67,6 +67,12 @@ Keep these IDs unchanged when moving source files or renaming output bundles.
 They identify the libraries independently of build paths; they do not guarantee
 ABI compatibility across compiler or library changes.
 
+Configured `sun build` runs reuse generated GIR bindings when the generator,
+selection, overrides, GIR metadata, target options, and generated files are
+unchanged. Deleted or edited outputs trigger regeneration. The cache is stored
+under the selected build directory and needs `sha256sum` or `shasum`.
+Run `bash tests/scripts/test-configured-generation.sh` to check cache invalidation.
+
 For incremental development:
 
 ```sh
