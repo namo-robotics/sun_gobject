@@ -3,7 +3,6 @@ manifest {
   archives: [
     "$SUN_BUILD/native/libsun_capture_native.a"
   ]
-  id: "namo-robotics/sun_capture"
   source_files: [
     "wrappers/capture/runtime.sun",
     "wrappers/capture/portal.sun",

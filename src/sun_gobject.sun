@@ -1,6 +1,5 @@
 /** Bundles generated GLib, GObject, and GIO declarations with ownership helpers. */
 manifest {
-  id: "namo-robotics/sun_gobject"
   source_files: [
     "${SUN_BUILD}/generated/sources/glib.sun",
     "${SUN_BUILD}/generated/sources/gobject.sun",

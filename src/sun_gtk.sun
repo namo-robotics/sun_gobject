@@ -3,7 +3,6 @@ manifest {
   archives: [
     "$SUN_BUILD/native/libsun_gobject_native.a"
   ]
-  id: "namo-robotics/sun_gtk"
   source_files: [
     "${SUN_BUILD}/generated/sources/gtk.sun",
     "wrappers/gtk/support.sun",

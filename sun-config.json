@@ -144,5 +144,191 @@
         }
       ]
     }
+  ],
+  "dependencies": [
+    {
+      "type": "system",
+      "check": {
+        "type": "executable",
+        "name": "cmake"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "cmake"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "cmake"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "executable",
+        "name": "pkg-config"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "pkg-config"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "pkgconf"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gtk4"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libgtk-4-dev"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "gtk4"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gio-2.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libglib2.0-dev"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "glib"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gobject-2.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libglib2.0-dev"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "glib"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "glib-2.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libglib2.0-dev"
+          ]
+        },
+        "macos": {
+          "brew": [
+            "glib"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gio-unix-2.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libglib2.0-dev"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gstreamer-1.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libgstreamer1.0-dev"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "gstreamer-video-1.0"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libgstreamer-plugins-base1.0-dev"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "x11"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libx11-dev"
+          ]
+        }
+      }
+    },
+    {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "xext"
+      },
+      "target": {
+        "linux": {
+          "apt": [
+            "libxext-dev"
+          ]
+        }
+      }
+    }
   ]
 }

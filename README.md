@@ -51,7 +51,13 @@ CMake, Ninja, GTK4 development files, librsvg, GIR metadata, Xvfb, and D-Bus. `.
 builds the native libraries, generates bindings, compiles Sun artifacts, and runs
 the full test suite. The demo needs a desktop display; headless tests use Xvfb.
 
-For a host installation, install the dependencies listed in [Dockerfile](Dockerfile).
+Native build requirements are declared as system dependencies in `sun-config.json`.
+Run `sun dep install --config sun-config.json` to install them, or add `--dry-run`
+to preview missing packages. Linux capture requirements apply only to Linux;
+GTK and GLib have both APT and Homebrew mappings. `sun build` checks these
+requirements before running native build steps.
+
+For the remaining development and test tools, see [Dockerfile](Dockerfile).
 The build script installs Sun through `scripts/bootstrap-sun.sh` if it is absent.
 Use `./scripts/bootstrap-sun.sh --update` to update the mutable dev release, or
 `SUN_EXECUTABLE=/absolute/path/to/sun ./build.sh` to select an installation with a
