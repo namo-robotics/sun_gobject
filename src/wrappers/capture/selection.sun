@@ -62,7 +62,10 @@ public module desktop {
       this.screen_width = width;
       this.screen_height = height;
       this.pointer = unsafe { sg_selection_new(x, y, width, height); };
-      var error = try from_c_str(make_heap_allocator(), unsafe { sg_selection_error(this.pointer); });
+      var error = try from_c_str(
+        make_heap_allocator(),
+        unsafe { sg_selection_error(this.pointer); }
+      );
       if (not error.is_empty()) {
         this.close();
         return SystemResult.Error(try Error(1, error));

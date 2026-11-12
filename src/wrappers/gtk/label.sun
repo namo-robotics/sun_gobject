@@ -38,7 +38,9 @@ public module gtk {
     public const method text() std.AllocationResult<String> {
       require_thread();
       var a = make_heap_allocator();
-      return std.AllocationResult.Ok(try from_c_str(a, unsafe { gtk_label_get_text(this.pointer); }));
+      return std.AllocationResult.Ok(
+        try from_c_str(a, unsafe { gtk_label_get_text(this.pointer); })
+      );
     }
 
     /** Borrows the handle only for code accepting GTK's native lifetime contract. */

@@ -108,7 +108,7 @@ module runtime_tests {
   /** Checks nullable owned strings and UTF-8 copying. */
   test_function owned_strings() {
     var text = glib.OwnedCString(unsafe { glib.raw.g_strdup("héllo"); });
-    match text.copy() {
+    match try text.copy() {
       Option.Some(copy) => {
         if (copy.equals_literal("héllo") == false) {
           try std.test.fail("Runtime acceptance check 12 failed");
@@ -119,7 +119,7 @@ module runtime_tests {
       }
     };
     var no_text = glib.OwnedCString(null);
-    match no_text.copy() {
+    match try no_text.copy() {
       Option.Some(copy) => {
         try std.test.fail("Runtime acceptance check 14 failed");
       },
@@ -136,7 +136,7 @@ module runtime_tests {
     var code = unsafe { _load<i32>(error.borrow(), 1); };
     var message = unsafe { _load<raw_ptr<u8>>(error.borrow(), 1); };
     var a = make_heap_allocator();
-    var copied = from_c_str(a, message);
+    var copied = try from_c_str(a, message);
     if (code != 42 or copied.equals_literal("example error") == false) {
       try std.test.fail("Runtime acceptance check 16 failed");
     }

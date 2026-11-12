@@ -5,7 +5,9 @@ public module sun_gobject_results {
   public function access<T>(result: std.Result<T>) std.Result<std.AccessResult<T>> {
     match result {
       (error: ref std.IndexOutOfBoundsError) => {
-        return std.Result.Ok(std.AccessResult.OutOfBounds(std.IndexOutOfBoundsError(error.index())));
+        return std.Result.Ok(
+          std.AccessResult.OutOfBounds(std.IndexOutOfBoundsError(error.index()))
+        );
       },
       _ => {}
     };

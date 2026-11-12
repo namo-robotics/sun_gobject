@@ -16,7 +16,16 @@ module demo {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     var malformed = try String("");
     try malformed.append_char(192);
@@ -25,19 +34,46 @@ module demo {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Invalid UTF-8 was accepted"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     match window.set_child(button) {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Parented button was accepted"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     match window.set_default_size(0, 240) {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Invalid size was accepted"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     button.click();
     return SystemResult.Ok;
@@ -88,7 +124,16 @@ module demo {
         SystemResult.Ok => {
           return SystemResult.Error(Error(1, "Closed window was presented"));
         },
-        SystemResult.Error(_) => {}
+        SystemResult.Error(_) => {},
+        SystemResult.Allocation(error) => {
+          return SystemResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return SystemResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return SystemResult.Overflow(error);
+        }
       };
       var detached = try String("Detached");
       try state.button.set_label(detached);
@@ -140,7 +185,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
   return AllocationResult.Ok(
     match demo.run(automated) {
       SystemResult.Ok => 0,
-      SystemResult.Error(error) => {
+      (error: const ref IError) => {
         std.io.eprintln(try error.message());
         return AllocationResult.Ok(1);
       }

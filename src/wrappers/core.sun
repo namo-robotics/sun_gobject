@@ -95,7 +95,10 @@ public module gobject {
   }
 
   /** Copies a nullable string property before releasing its temporary GValue. */
-  public function get_string(object: raw_ptr<u8>, property: raw_ptr<u8>) AllocationResult<Option<String>> {
+  public function get_string(
+    object: raw_ptr<u8>,
+    property: raw_ptr<u8>
+  ) AllocationResult<Option<String>> {
     var a = make_heap_allocator();
     var value = Value();
     var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));

@@ -29,6 +29,15 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
   }
   match grid.place_first(grid, 0, 0, 1, 1) {
     SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    },
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Grid accepted self parenting"));
     }
@@ -56,7 +65,7 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
   key = try String("replacement");
   try select.add_option(labels, key);
   for (var i: i64 = 0; i < 3; i += 1) {
-    match queue.next() {
+    match try queue.next() {
       Option.Some(event) => {
         var expected = try String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
 
@@ -71,7 +80,7 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
   }
   text = try String("programmatic");
   try entry.set_text(text);
-  match queue.next() {
+  match try queue.next() {
     Option.None => {},
     Option.Some(_) => {
       return SystemResult.Error(Error(1, "Controlled setter emitted a user edit"));
@@ -101,13 +110,31 @@ function run() SystemResult<void> {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Reparenting a label was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   match toolbar.append(root) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "A parenting cycle was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   var invalid = try String("bad");
   try invalid.append_char(0);
@@ -115,9 +142,18 @@ function run() SystemResult<void> {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
-  var unchanged = label.text();
+  var unchanged = try label.text();
   if (unchanged.equals_literal("Ready") == false) {
     return SystemResult.Error(Error(1, "Invalid text changed the label"));
   }
@@ -126,7 +162,16 @@ function run() SystemResult<void> {
     SystemResult.Ok(_) => {
       return SystemResult.Error(Error(1, "Malformed SVG was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   // The area must retain its document after the source wrapper leaves scope.
   if (true) {
@@ -157,7 +202,16 @@ function run() SystemResult<void> {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent save request was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   chooser.cancel();
   chooser.cancel();
@@ -178,7 +232,16 @@ function run() SystemResult<void> {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent open request was accepted"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   open.cancel();
   open.cancel();
@@ -196,13 +259,31 @@ function run() SystemResult<void> {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Closed parent accepted an open request"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   match chooser.show(window, title, filename) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Closed parent accepted a save request"));
     },
-    SystemResult.Error(_) => {}
+    SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    }
   };
   std.io.eprintln("Dialogs closed; checking declarative widgets");
   try declarative_widgets(app);
@@ -222,6 +303,15 @@ function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
   var invalid = try String("1,0,3000000;2,2000000,4000000");
   match media.media_ranges(invalid, 1) {
     SystemResult.Error(_) => {},
+    SystemResult.Allocation(error) => {
+      return SystemResult.Allocation(error);
+    },
+    SystemResult.InvalidArgument(error) => {
+      return SystemResult.InvalidArgument(error);
+    },
+    SystemResult.Overflow(error) => {
+      return SystemResult.Overflow(error);
+    },
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Overlapping media ranges accepted"));
     }
@@ -238,7 +328,7 @@ function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
   try media.drag_media(0.5, 0.75);
   var edited = false;
   while (true) {
-    match queue.next() {
+    match try queue.next() {
       Option.Some(event) => {
         edited = edited or event.text.equals_literal("3000000:4000000:3000000:2");
       },
@@ -262,7 +352,7 @@ function main() AllocationResult<i32> {
   return AllocationResult.Ok(
     match run() {
       SystemResult.Ok => 0,
-      SystemResult.Error(error) => {
+      (error: const ref IError) => {
         std.io.eprintln(try error.message());
         return AllocationResult.Ok(1);
       }

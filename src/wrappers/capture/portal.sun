@@ -90,7 +90,9 @@ public module desktop {
 
     /** Copies the preferred serial or fallback node identifier. */
     public method target(serial: bool) std.AllocationResult<String> {
-      return std.AllocationResult.Ok(try take_text(unsafe { sg_portal_target(this.pointer, serial ? 1 : 0); }));
+      return std.AllocationResult.Ok(
+        try take_text(unsafe { sg_portal_target(this.pointer, serial ? 1 : 0); })
+      );
     }
   }
 }

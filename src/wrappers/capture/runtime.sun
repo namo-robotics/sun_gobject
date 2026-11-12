@@ -53,7 +53,9 @@ public module desktop {
 
   /** Copies the user's configured pictures or videos directory. */
   public function media_directory(video: bool) std.AllocationResult<String> {
-    return std.AllocationResult.Ok(try from_c_str(make_heap_allocator(), unsafe { sg_capture_directory(video ? 1 : 0); }));
+    return std.AllocationResult.Ok(
+      try from_c_str(make_heap_allocator(), unsafe { sg_capture_directory(video ? 1 : 0); })
+    );
   }
 
   /** Generates a unique timestamp for an output filename. */

@@ -7,8 +7,8 @@ function main() AllocationResult<i32> {
   var reader = try std.xml.XmlReader(a, input);
   return AllocationResult.Ok(
     match reader.next() {
-      std.xml.XmlResult.Ok(_) => 0,
-      std.xml.XmlResult.Error(_) => 1
+      Result.Ok(_) => 0,
+      _ => 1
     }
   );
 }

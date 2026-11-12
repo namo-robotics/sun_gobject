@@ -43,10 +43,7 @@ public module gir {
     }
 
     /** Loads a namespace once and recursively resolves its versioned dependencies. */
-    public method load(
-      name: const ref String,
-      version: const ref String
-    ) AllocationResult<void> {
+    public method load(name: const ref String, version: const ref String) AllocationResult<void> {
       var a = make_heap_allocator();
       var key = try name.clone(a);
       try key.append("-");

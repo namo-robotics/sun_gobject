@@ -4,7 +4,7 @@ using std;
 module event_loop_tests {
 
   /** Starts one bounded display-backed client with core dumps disabled. */
-  function scenario(name: static_ptr<u8>) checks.Result<std.process.Output> {
+  function scenario(name: static_ptr<u8>) std.test.AssertionResult<std.process.Output> {
     var a = make_heap_allocator();
     var command = try std.process.Command(a, "sh");
     try command.add_arg("-c");
@@ -12,83 +12,83 @@ module event_loop_tests {
       "ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$1/event-client\" \"$2\""
     );
     try command.add_arg("event-test");
-    try command.add_arg(try test_build.directory());
+    try command.add_arg(test_build.directory());
     try command.add_arg(name);
-    return checks.Result.Ok(try std.test.expect_system(command.output()));
+    return std.test.AssertionResult.Ok(try std.test.expect_system(command.output()));
   }
 
   /** Checks state-independent FIFO delivery, widget ownership, and consumer-controlled lifetime. */
-  test_function native_queue() checks.Result<void> {
+  test_function native_queue() std.test.AssertionResult<void> {
     var output = try scenario("native_queue");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks FIFO handlers, queued cancellation, and independent polling. */
-  test_function ordering() checks.Result<void> {
+  test_function ordering() std.test.AssertionResult<void> {
     var output = try scenario("ordering");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks callback-time registration and same-callback timer cancellation. */
-  test_function deferred() checks.Result<void> {
+  test_function deferred() std.test.AssertionResult<void> {
     var output = try scenario("deferred");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks one-shot and repeated timers without catch-up bursts. */
-  test_function timers() checks.Result<void> {
+  test_function timers() std.test.AssertionResult<void> {
     var output = try scenario("timers");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks quit, callback errors, and completion cleanup. */
-  test_function completion() checks.Result<void> {
+  test_function completion() std.test.AssertionResult<void> {
     var output = try scenario("completion");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks close notifications, replacement windows, and automatic exit. */
-  test_function windows() checks.Result<void> {
+  test_function windows() std.test.AssertionResult<void> {
     var output = try scenario("windows");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks foreign IDs, stale IDs, and nested dispatch rejection. */
-  test_function identities() checks.Result<void> {
+  test_function identities() std.test.AssertionResult<void> {
     var output = try scenario("identities");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks emitter retention after its Sun wrapper is destroyed. */
-  test_function ownership() checks.Result<void> {
+  test_function ownership() std.test.AssertionResult<void> {
     var output = try scenario("ownership");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Checks GTK receives a turn between bounded callback batches. */
-  test_function fairness() checks.Result<void> {
+  test_function fairness() std.test.AssertionResult<void> {
     var output = try scenario("fairness");
     try checks.success(output);
     try std.test.assert(output.stdout().contains("Event scenario passed"));
   }
 
   /** Rejects worker-thread loop mutation before native access. */
-  test_function worker() checks.Result<void> {
+  test_function worker() std.test.AssertionResult<void> {
     var output = try scenario("worker");
     try std.test.assert_ne(output.status(), 0);
     try std.test.assert(output.stderr().contains("must be used and destroyed on the main thread"));
   }
 
   /** Rejects recursive manual iteration inside a callback. */
-  test_function manual() checks.Result<void> {
+  test_function manual() std.test.AssertionResult<void> {
     var output = try scenario("manual");
     try std.test.assert_ne(output.status(), 0);
     try std.test.assert(
@@ -97,13 +97,13 @@ module event_loop_tests {
   }
 
   /** Verifies native reference release on success, callback error, and an unrun loop. */
-  test_function cleanup() checks.Result<void> {
+  test_function cleanup() std.test.AssertionResult<void> {
     var output = try scenario("cleanup");
     try checks.success(output);
   }
 
   /** Prevents user code from bypassing deferred mutation through registry fields. */
-  test_function registry_is_private() checks.Result<void> {
+  test_function registry_is_private() std.test.AssertionResult<void> {
     var fixture = try checks.Fixture();
     var source = try String(
       "/** Attempts direct mutation of the callback registry. */\nfunction corrupt(loop: ref gtk.EventLoop<i32>) void { loop.handlers.clear(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
