@@ -7,11 +7,13 @@ public module gtk {
   public class NativeEvent {
     var id: RegistrationId;
     var event_kind: EventKind;
-    public var text: String = String("");
+    public var text: String;
     public var value: i32 = 0;
 
     /** Takes an opaque identity and its native event category. */
-    init(id: RegistrationId, kind: EventKind) {
+    init(id: RegistrationId, kind: EventKind) AllocationResult<void> {
+      this.text = try String("");
+
       this.id = id;
       this.event_kind = kind;
     }

@@ -79,7 +79,7 @@ public module gtk {
     }
 
     /** Copies any context-creation error for application reporting. */
-    public const method error() String {
+    public const method error() std.AllocationResult<String> {
       require_thread();
       return from_c_str(make_heap_allocator(), unsafe { sg_gl_area_error(this.pointer); });
     }

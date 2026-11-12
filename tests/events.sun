@@ -6,14 +6,14 @@ module event_loop_tests {
   /** Starts one bounded display-backed client with core dumps disabled. */
   function scenario(name: static_ptr<u8>) checks.Result<std.process.Output> {
     var a = make_heap_allocator();
-    var command = std.process.Command(a, "sh");
-    command.add_arg("-c");
-    command.add_arg(
+    var command = try std.process.Command(a, "sh");
+    try command.add_arg("-c");
+    try command.add_arg(
       "ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$1/event-client\" \"$2\""
     );
-    command.add_arg("event-test");
-    command.add_arg(test_build.directory());
-    command.add_arg(name);
+    try command.add_arg("event-test");
+    try command.add_arg(try test_build.directory());
+    try command.add_arg(name);
     return checks.Result.Ok(try std.test.expect_system(command.output()));
   }
 
@@ -105,10 +105,10 @@ module event_loop_tests {
   /** Prevents user code from bypassing deferred mutation through registry fields. */
   test_function registry_is_private() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var source = String(
+    var source = try String(
       "/** Attempts direct mutation of the callback registry. */\nfunction corrupt(loop: ref gtk.EventLoop<i32>) void { loop.handlers.clear(); }\nmanifest { libraries: [\"stdlib.moon\", \"sun_gobject.moon\", \"sun_gtk.moon\"] }\n"
     );
-    var path = fixture.file("client.sun");
+    var path = try fixture.file("client.sun");
     try checks.write(path, source);
     var result = try checks.command(
       fixture,

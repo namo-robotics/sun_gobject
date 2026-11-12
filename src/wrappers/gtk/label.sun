@@ -14,7 +14,7 @@ public module gtk {
       if (unsafe { gtk_init_check(); } == 0) {
         return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
       }
-      this.pointer = unsafe { gtk_label_new(text.c_str()); };
+      this.pointer = unsafe { gtk_label_new(try text.c_str()); };
       unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
     }
 
@@ -30,15 +30,15 @@ public module gtk {
     public method set_text(text: ref String) SystemResult<void> {
       require_thread();
       try validate(text);
-      unsafe { gtk_label_set_text(this.pointer, text.c_str()); };
+      unsafe { gtk_label_set_text(this.pointer, try text.c_str()); };
       return SystemResult.Ok;
     }
 
     /** Copies the current label into Sun-owned storage. */
-    public const method text() String {
+    public const method text() std.AllocationResult<String> {
       require_thread();
       var a = make_heap_allocator();
-      return from_c_str(a, unsafe { gtk_label_get_text(this.pointer); });
+      return std.AllocationResult.Ok(try from_c_str(a, unsafe { gtk_label_get_text(this.pointer); }));
     }
 
     /** Borrows the handle only for code accepting GTK's native lifetime contract. */

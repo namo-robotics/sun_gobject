@@ -10,12 +10,12 @@ public module gtk {
     var handlers: Vec<Handler<State>>;
 
     /** Takes the application and allocates registry and native queue storage. */
-    init(application: Application) {
+    init(application: Application) AllocationResult<void> {
       require_thread();
       this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
       this.application = application;
       var a = make_heap_allocator();
-      this.handlers = Vec<Handler<State>>(a, 8);
+      this.handlers = try Vec<Handler<State>>(a, 8);
     }
 
     /** Disconnects every source before releasing application and queue references. */
@@ -54,7 +54,7 @@ public module gtk {
     /** Installs a staged handler and transfers it into registry ownership. */
     method add(handler: Handler<State>) SystemResult<void> {
       try handler.install(this.core);
-      this.handlers.push(handler);
+      try this.handlers.push(handler);
       return SystemResult.Ok;
     }
 
@@ -137,7 +137,7 @@ public module gtk {
       }
       var kind = this.handlers[index].kind;
       var id = registration_id(this.core, number);
-      var context = EventContext<State>(this.core.copy(), id, kind);
+      var context = try EventContext<State>(this.core.copy(), id, kind);
       if (true) {
         try this.handlers[index].call(state, context);
       }

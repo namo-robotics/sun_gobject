@@ -95,7 +95,7 @@ public module gobject {
   }
 
   /** Copies a nullable string property before releasing its temporary GValue. */
-  public function get_string(object: raw_ptr<u8>, property: raw_ptr<u8>) Option<String> {
+  public function get_string(object: raw_ptr<u8>, property: raw_ptr<u8>) AllocationResult<Option<String>> {
     var a = make_heap_allocator();
     var value = Value();
     var p = _bitcast<raw_ptr<u8>>(_address_of<Value>(value));
@@ -103,11 +103,11 @@ public module gobject {
     var text = unsafe { raw.g_value_get_string(p); };
     if (text == null) {
       unsafe { raw.g_value_unset(p); };
-      return Option.None;
+      return AllocationResult.Ok(Option.None);
     }
     var copy = from_c_str(a, text);
     unsafe { raw.g_value_unset(p); };
-    return Option.Some(copy);
+    return AllocationResult.Ok(Option.Some(try copy));
   }
 
   /** Exposes named-function callbacks and deterministic signal disconnection. */
@@ -192,12 +192,12 @@ public module glib {
     }
 
     /** Copies the native string into Sun storage, preserving null as None. */
-    public const method copy() Option<String> {
+    public const method copy() AllocationResult<Option<String>> {
       if (this.pointer == null) {
-        return Option.None;
+        return AllocationResult.Ok(Option.None);
       }
       var a = make_heap_allocator();
-      return Option.Some(from_c_str(a, this.pointer));
+      return AllocationResult.Ok(Option.Some(try from_c_str(a, this.pointer)));
     }
   }
 

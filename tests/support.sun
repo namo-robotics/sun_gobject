@@ -4,7 +4,7 @@ using std;
 module checks {
 
   /** Carries assertion, system, JSON, and bounds failures to the test runner. */
-  public enum Result<T> { Ok(T), Assertion(std.test.AssertionError), System(Error), Json(JsonError), Bounds(IndexOutOfBoundsError) }
+  public enum Result<T> { Ok(T), Assertion(std.test.AssertionError), System(Error), Json(std.json.JsonError), Bounds(IndexOutOfBoundsError) }
 
   /** Owns a unique workspace scratch directory and removes it on scope exit. */
   public class Fixture {
@@ -13,34 +13,34 @@ module checks {
     /** Creates a directory without changing the process working directory. */
     init() checks.Result<void> {
       var a = make_heap_allocator();
-      var command = std.process.Command(a, "mktemp");
-      command.add_arg("-d");
-      var pattern = String(test_build.root());
-      pattern.append("/tmp/sun-tests.XXXXXX");
-      command.add_arg(pattern);
+      var command = try std.process.Command(a, "mktemp");
+      try command.add_arg("-d");
+      var pattern = try String(test_build.root());
+      try pattern.append("/tmp/sun-tests.XXXXXX");
+      try command.add_arg(pattern);
       var output = try std.test.expect_system(command.output());
       try std.test.assert_eq(output.status(), 0);
-      var directory = output.stdout().clone(a);
+      var directory = try output.stdout().clone(a);
       directory.trim();
       this.path = directory;
     }
 
     /** Resolves a file beneath this fixture. */
-    public method file(name: static_ptr<u8>) String {
+    public method file(name: static_ptr<u8>) AllocationResult<String> {
       var a = make_heap_allocator();
-      var result = this.path.clone(a);
-      result.append("/");
-      result.append(name);
-      return result;
+      var result = try this.path.clone(a);
+      try result.append("/");
+      try result.append(name);
+      return AllocationResult.Ok(result);
     }
 
     /** Removes nested fixture files even after an assertion fails. */
     deinit() {
       var a = make_heap_allocator();
-      var command = std.process.Command(a, "rm");
-      command.add_arg("-rf");
-      command.add_arg("--");
-      command.add_arg(this.path);
+      var command = try std.process.Command(a, "rm");
+      try command.add_arg("-rf");
+      try command.add_arg("--");
+      try command.add_arg(this.path);
       ignore_error(command.status());
     }
   }
@@ -51,25 +51,25 @@ module checks {
     script: static_ptr<u8>
   ) checks.Result<std.process.Output> {
     var a = make_heap_allocator();
-    var command = std.process.Command(a, "timeout");
-    command.add_arg("30s");
-    command.add_arg("sh");
-    command.add_arg("-eu");
-    command.add_arg("-c");
-    command.add_arg(script);
-    command.add_arg("sun-tests");
-    command.add_arg(fixture.path);
-    command.add_arg(test_build.directory());
-    command.add_arg(test_build.compiler());
-    command.add_arg(test_build.root());
+    var command = try std.process.Command(a, "timeout");
+    try command.add_arg("30s");
+    try command.add_arg("sh");
+    try command.add_arg("-eu");
+    try command.add_arg("-c");
+    try command.add_arg(script);
+    try command.add_arg("sun-tests");
+    try command.add_arg(fixture.path);
+    try command.add_arg(try test_build.directory());
+    try command.add_arg(try test_build.compiler());
+    try command.add_arg(test_build.root());
     return checks.Result.Ok(try std.test.expect_system(command.output()));
   }
 
   /** Reports subprocess diagnostics before asserting its successful exit. */
   public function success(output: ref std.process.Output) checks.Result<void> {
     if (output.status() != 0) {
-      eprintln(output.stdout());
-      eprintln(output.stderr());
+      std.io.eprintln(output.stdout());
+      std.io.eprintln(output.stderr());
     }
     try std.test.assert_eq(output.status(), 0);
     return checks.Result.Ok;

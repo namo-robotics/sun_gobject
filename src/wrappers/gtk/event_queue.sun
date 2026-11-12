@@ -12,7 +12,7 @@ public module gtk {
     init(application: ref Application) SystemResult<void> {
       this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
       var a = make_heap_allocator();
-      this.sources = Vec<QueuedSource>(a, 8);
+      this.sources = try Vec<QueuedSource>(a, 8);
       if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
         return SystemResult.Error(Error(1, "Another event dispatcher owns the GTK context"));
       }
@@ -32,7 +32,7 @@ public module gtk {
       if (source == null) {
         return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
       }
-      this.sources.push(QueuedSource(number, kind, source));
+      try this.sources.push(QueuedSource(number, kind, source));
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
@@ -64,7 +64,7 @@ public module gtk {
     public method after(delay_ms: u32) SystemResult<RegistrationId> {
       var number = try this.core.reserve();
       var source = unsafe { sg_loop_timer(this.core.pointer, number, delay_ms); };
-      this.sources.push(QueuedSource(number, 3, source));
+      try this.sources.push(QueuedSource(number, 3, source));
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
@@ -84,12 +84,12 @@ public module gtk {
     }
 
     /** Takes the next live delivery, skipping canceled sources and consuming one-shot sources. */
-    public method next() Option<NativeEvent> {
+    public method next() AllocationResult<Option<NativeEvent>> {
       require_thread();
       while (true) {
         var number = unsafe { sg_loop_pop(this.core.pointer, 0); };
         if (number == 0) {
-          return Option.None;
+          return AllocationResult.Ok(Option.None);
         }
         for (var i: i64 = 0; i < this.sources.size(); i += 1) {
           if (this.sources[i].number == number) {
@@ -101,19 +101,19 @@ public module gtk {
                 AccessResult.OutOfBounds(_) => {}
               };
             }
-            var event = NativeEvent(
+            var event = try NativeEvent(
               id,
               kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : (kind == 3 ? EventKind.Timer : (kind ==
                 4 ? EventKind.TextChanged : (kind == 5 ? EventKind.Toggled : EventKind.Selected))))
             );
             var a = make_heap_allocator();
-            event.text = from_c_str(a, unsafe { sg_loop_text(this.core.pointer); });
+            event.text = try from_c_str(a, unsafe { sg_loop_text(this.core.pointer); });
             event.value = unsafe { sg_loop_value(this.core.pointer); };
-            return Option.Some(event);
+            return AllocationResult.Ok(Option.Some(event));
           }
         }
       }
-      return Option.None;
+      return AllocationResult.Ok(Option.None);
     }
 
     /** Services GTK once, blocking only when requested and no deliveries are queued. */

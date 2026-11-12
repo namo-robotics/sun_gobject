@@ -1,16 +1,21 @@
 using std;
 
 /** Verifies that the selected compiler provides the standard-library XML reader. */
-function main() i32 {
+function main() AllocationResult<i32> {
   var a = make_heap_allocator();
-  var input = String("<probe/>");
-  var reader = XmlReader(a, input);
-  return match reader.next() {
-    XmlResult.Ok(_) => 0,
-    XmlResult.Error(_) => 1
-  };
+  var input = try String("<probe/>");
+  var reader = try std.xml.XmlReader(a, input);
+  return AllocationResult.Ok(
+    match reader.next() {
+      std.xml.XmlResult.Ok(_) => 0,
+      std.xml.XmlResult.Error(_) => 1
+    }
+  );
 }
 manifest {
+  source_files: [
+    "../src/results.sun"
+  ]
   libraries: [
     "stdlib.moon"
   ]

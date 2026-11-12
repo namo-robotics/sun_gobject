@@ -12,13 +12,13 @@ public module gtk {
     init(id: ref String) SystemResult<void> {
       require_thread();
       try validate(id);
-      if (unsafe { g_application_id_is_valid(id.c_str()); } == 0) {
+      if (unsafe { g_application_id_is_valid(try id.c_str()); } == 0) {
         return SystemResult.Error(Error(1, "Invalid application identifier"));
       }
       if (unsafe { gtk_init_check(); } == 0) {
         return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
       }
-      this.pointer = unsafe { raw.gtk_application_new(id.c_str(), 32); };
+      this.pointer = unsafe { raw.gtk_application_new(try id.c_str(), 32); };
       if (unsafe { g_application_register(this.pointer, null, null); } == 0) {
         unsafe { gobject.raw.g_object_unref(this.pointer); };
         this.pointer = null;

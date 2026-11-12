@@ -8,13 +8,13 @@ public module sg {
 
   /** Prints a runtime diagnostic and terminates with failure. */
   public function fail(message: const ref String) void {
-    eprintln(message);
+    std.io.eprintln(message);
     unsafe { exit(1); };
   }
 
   /** Prints a literal diagnostic and terminates with failure. */
   public function die(message: static_ptr<u8>) void {
-    eprintln(message);
+    std.io.eprintln(message);
     unsafe { exit(1); };
   }
 
@@ -27,31 +27,35 @@ public module sg {
   }
 
   /** Copies a validated byte range into a new owned string. */
-  public function slice(s: const ref String, start: i64, length: i64) String {
+  public function slice(s: const ref String, start: i64, length: i64) std.Result<String> {
     var alloc = make_heap_allocator();
-    return match s.substr(alloc, start, length) {
-      AccessResult.Ok(v) => v,
-      AccessResult.OutOfBounds(e) => String(alloc, "")
-    };
+    return std.Result.Ok(
+      match try sun_gobject_results.access(s.substr(alloc, start, length)) {
+        AccessResult.Ok(v) => v,
+        AccessResult.OutOfBounds(e) => try String(alloc, "")
+      }
+    );
   }
 
   /** Reads a complete file or terminates with the failing path. */
-  public function read(path: ref String) String {
+  public function read(path: ref String) AllocationResult<String> {
     var alloc = make_heap_allocator();
-    return match std.io.read_to_string(alloc, path) {
-      SystemResult.Ok(v) => v,
-      SystemResult.Error(e) => {
-        fail(path);
-        return String(alloc, "");
+    return AllocationResult.Ok(
+      match std.io.read_to_string(alloc, path) {
+        SystemResult.Ok(v) => v,
+        (error: const ref IError) => {
+          fail(path);
+          return AllocationResult.Ok(try String(alloc, ""));
+        }
       }
-    };
+    );
   }
 
   /** Writes generated content or terminates with the failing path. */
   public function write(path: ref String, value: ref String) void {
     match std.io.write_string(path, value) {
       SystemResult.Ok => {},
-      SystemResult.Error(e) => {
+      (error: const ref IError) => {
         fail(path);
       }
     };

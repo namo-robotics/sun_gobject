@@ -53,7 +53,7 @@ public module gtk {
       if (not icon.is_empty() and this.kind != 6) {
         return SystemResult.Error(Error(1, "Only buttons support icons"));
       }
-      unsafe { sg_view_hint(this.pointer, tooltip.c_str(), icon.c_str()); };
+      unsafe { sg_view_hint(this.pointer, try tooltip.c_str(), try icon.c_str()); };
       return SystemResult.Ok;
     }
 
@@ -62,7 +62,7 @@ public module gtk {
       require_thread();
       try validate(encoded);
       if (this.kind != 10 or
-        unsafe { sg_media_ranges(this.pointer, encoded.c_str(), active); } == 0) {
+        unsafe { sg_media_ranges(this.pointer, try encoded.c_str(), active); } == 0) {
         return SystemResult.Error(Error(1, "Invalid kept video sections"));
       }
       return SystemResult.Ok;
@@ -75,7 +75,7 @@ public module gtk {
       if (this.kind != 12) {
         return SystemResult.Error(Error(1, "Widget is not an image"));
       }
-      unsafe { sg_image_set(this.pointer, path.c_str()); };
+      unsafe { sg_image_set(this.pointer, try path.c_str()); };
       return SystemResult.Ok;
     }
 
@@ -118,7 +118,7 @@ public module gtk {
         (duration > 0 and start == end)) {
         return SystemResult.Error(Error(1, "Invalid media range"));
       }
-      unsafe { sg_media_set(this.pointer, path.c_str(), duration, start, end, position); };
+      unsafe { sg_media_set(this.pointer, try path.c_str(), duration, start, end, position); };
       return SystemResult.Ok;
     }
 
@@ -170,7 +170,7 @@ public module gtk {
       if (this.kind < 5 or this.kind > 8) {
         return SystemResult.Error(Error(1, "Widget has no text property"));
       }
-      unsafe { sg_view_text(this.pointer, text.c_str()); };
+      unsafe { sg_view_text(this.pointer, try text.c_str()); };
       return SystemResult.Ok;
     }
 
@@ -202,7 +202,7 @@ public module gtk {
       if (this.kind != 9) {
         return SystemResult.Error(Error(1, "Widget is not a select"));
       }
-      unsafe { sg_view_options(this.pointer, text.c_str(), key.c_str(), 0); };
+      unsafe { sg_view_options(this.pointer, try text.c_str(), try key.c_str(), 0); };
       return SystemResult.Ok;
     }
 
@@ -295,7 +295,7 @@ public module gtk {
     public method style(css: ref String) SystemResult<void> {
       require_thread();
       try validate(css);
-      if (unsafe { sg_view_style(this.pointer, css.c_str()); } == 0) {
+      if (unsafe { sg_view_style(this.pointer, try css.c_str()); } == 0) {
         return SystemResult.Error(Error(1, "Invalid widget style"));
       }
       return SystemResult.Ok;
@@ -318,7 +318,7 @@ public module gtk {
       if (this.kind < 7 or this.kind > 9 or value < -1) {
         return SystemResult.Error(Error(1, "Widget is not editable"));
       }
-      unsafe { sg_view_edit(this.pointer, text.c_str(), value); };
+      unsafe { sg_view_edit(this.pointer, try text.c_str(), value); };
       return SystemResult.Ok;
     }
 

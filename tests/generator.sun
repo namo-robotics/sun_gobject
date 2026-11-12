@@ -13,9 +13,9 @@ module generator_tests {
 
   /** Reads an input fixture from the repository. */
   function input(name: static_ptr<u8>) checks.Result<String> {
-    var path = String(test_build.root());
-    path.append("/tests/fixtures/");
-    path.append(name);
+    var path = try String(test_build.root());
+    try path.append("/tests/fixtures/");
+    try path.append(name);
     return checks.read(path);
   }
 
@@ -25,7 +25,7 @@ module generator_tests {
     content: ref String,
     accepted: bool
   ) checks.Result<void> {
-    var path = fixture.file("input.xml");
+    var path = try fixture.file("input.xml");
     try checks.write(path, content);
     var output = try checks.command(fixture, "exec \"$2/sun_gir\" --check-xml \"$1/input.xml\"");
     try std.test.assert_eq(output.status() == 0, accepted);
@@ -60,7 +60,8 @@ module generator_tests {
     var fixture = try checks.Fixture();
     var content = try input("xml-valid.xml");
     try xml(fixture, content, true);
-    var unicode = String("<r a=\"&#x1F600;&#65;\">é &amp; <![CDATA[<>]]></r>");
+    var unicode = try String("<r a=\"&#x1F600;&#65;\">é &amp; <![CDATA[<>]]></r>");
+
     try xml(fixture, unicode, true);
   }
 
@@ -68,34 +69,47 @@ module generator_tests {
   test_function malformed_xml() checks.Result<void> {
     var fixture = try checks.Fixture();
     var a = make_heap_allocator();
-    var cases = Vec<String>(a, 16);
-    cases.push(String("<r>"));
-    cases.push(String("<r></wrong>"));
-    cases.push(String("<r/><s/>"));
-    cases.push(String("<r a=\"1\"a=\"2\"/>"));
-    cases.push(String("<r a=\"1\" a=\"2\"/>"));
-    cases.push(String("<r>&unknown;</r>"));
-    cases.push(String("<r>&#0;</r>"));
-    cases.push(String("<r>&#xD800;</r>"));
-    cases.push(String("<r>&#99999999;</r>"));
-    cases.push(String("<!DOCTYPE r SYSTEM \"file:///etc/passwd\"><r/>"));
-    cases.push(String("<r><!-- bad -- comment --></r>"));
-    cases.push(String("<r>]]></r>"));
-    cases.push(String("<r a=\"<\"/>"));
-    var overlong = String("<r>");
-    overlong.append_char(192);
-    overlong.append_char(128);
-    overlong.append("</r>");
-    cases.push(overlong);
-    var truncated = String("<r>");
-    truncated.append_char(240);
-    truncated.append_char(144);
-    truncated.append("</r>");
-    cases.push(truncated);
-    var nul = String("<r>");
-    nul.append_char(0);
-    nul.append("</r>");
-    cases.push(nul);
+    var cases = try Vec<String>(a, 16);
+    try cases.push(try String("<r>"));
+    try cases.push(try String("<r></wrong>"));
+
+    try cases.push(try String("<r/><s/>"));
+    try cases.push(try String("<r a=\"1\"a=\"2\"/>"));
+
+    try cases.push(try String("<r a=\"1\" a=\"2\"/>"));
+
+    try cases.push(try String("<r>&unknown;</r>"));
+
+    try cases.push(try String("<r>&#0;</r>"));
+
+    try cases.push(try String("<r>&#xD800;</r>"));
+
+    try cases.push(try String("<r>&#99999999;</r>"));
+
+    try cases.push(
+      try String("<!DOCTYPE r SYSTEM \"file:///etc/passwd\"><r/>")
+    );
+
+    try cases.push(try String("<r><!-- bad -- comment --></r>"));
+
+    try cases.push(try String("<r>]]></r>"));
+
+    try cases.push(try String("<r a=\"<\"/>"));
+
+    var overlong = try String("<r>");
+    try overlong.append_char(192);
+    try overlong.append_char(128);
+    try overlong.append("</r>");
+    try cases.push(overlong);
+    var truncated = try String("<r>");
+    try truncated.append_char(240);
+    try truncated.append_char(144);
+    try truncated.append("</r>");
+    try cases.push(truncated);
+    var nul = try String("<r>");
+    try nul.append_char(0);
+    try nul.append("</r>");
+    try cases.push(nul);
     for (var content: ref String in cases) {
       try xml(fixture, content, false);
     }
@@ -106,7 +120,7 @@ module generator_tests {
     var fixture = try checks.Fixture();
     var result = try generate(fixture);
     try checks.success(result);
-    var path = fixture.file("tiny.sun");
+    var path = try fixture.file("tiny.sun");
     var source = try checks.read(path);
     var golden = try input("tiny.expected.sun");
     try std.test.assert_eq(source, golden);
@@ -117,31 +131,31 @@ module generator_tests {
     try checks.success(compiled);
     var snapshot_allocator = make_heap_allocator();
     var entries = try std.test.expect_system(std.io.read_dir(snapshot_allocator, fixture.path));
-    var contents = Vec<String>(snapshot_allocator, entries.size());
+    var contents = try Vec<String>(snapshot_allocator, entries.size());
     for (var entry: ref std.io.DirEntry in entries) {
-      var file_path = fixture.path.clone(snapshot_allocator);
-      file_path.append("/");
-      file_path.append(entry.name());
-      contents.push(try checks.read(file_path));
+      var file_path = try fixture.path.clone(snapshot_allocator);
+      try file_path.append("/");
+      try file_path.append(entry.name());
+      try contents.push(try checks.read(file_path));
     }
     var again = try generate(fixture);
     try checks.success(again);
     var after = try std.test.expect_system(std.io.read_dir(snapshot_allocator, fixture.path));
     try std.test.assert_eq(after.size(), entries.size());
     for (var i: i64 = 0; i < entries.size(); i += 1) {
-      var file_path = fixture.path.clone(snapshot_allocator);
-      file_path.append("/");
-      file_path.append((try entries.get(i)).name());
+      var file_path = try fixture.path.clone(snapshot_allocator);
+      try file_path.append("/");
+      try file_path.append((try entries.get(i)).name());
       var content = try checks.read(file_path);
       try std.test.assert_eq(try contents.get(i), content);
     }
     var a = make_heap_allocator();
-    var model_path = fixture.file("gir-model.json");
-    var model = try std.test.expect_json(parse_json(a, try checks.read(model_path)));
-    var nodes: ref Json = try (try model.at(0)).get("nodes");
+    var model_path = try fixture.file("gir-model.json");
+    var model = try std.test.expect_json(std.json.parse_json(a, try checks.read(model_path)));
+    var nodes: ref std.json.Json = try (try model.at(0)).get("nodes");
     var parent_found = false;
     for (var i: i64 = 0; i < nodes.len(); i += 1) {
-      var attrs: ref Json = try (try nodes.at(i)).get("attributes");
+      var attrs: ref std.json.Json = try (try nodes.at(i)).get("attributes");
       if (attrs.has("parent")) {
         if ((try (try attrs.get("parent")).as_string()).equals_literal("GObject.Object")) {
           parent_found = true;
@@ -149,13 +163,15 @@ module generator_tests {
       }
     }
     try std.test.assert(parent_found, "inheritance metadata retained");
-    var provenance_path = fixture.file("provenance.json");
-    var provenance = try std.test.expect_json(parse_json(a, try checks.read(provenance_path)));
+    var provenance_path = try fixture.file("provenance.json");
+    var provenance = try std.test.expect_json(
+      std.json.parse_json(a, try checks.read(provenance_path))
+    );
     try std.test.assert_eq(
       (try (try (try provenance.get("gir")).get("Tiny-1.0")).as_string()).length(),
       64
     );
-    var coverage_path = fixture.file("coverage.tsv");
+    var coverage_path = try fixture.file("coverage.tsv");
     var coverage = try checks.read(coverage_path);
     try std.test.assert(coverage.contains("tiny_unsupported\tunselected"));
   }
@@ -165,11 +181,11 @@ module generator_tests {
     var fixture = try checks.Fixture();
     var result = try generate(fixture);
     try checks.success(result);
-    var path = fixture.file("tiny.sun");
+    var path = try fixture.file("tiny.sun");
     var before = try checks.read(path);
     var selection = try input("selection.xml");
     selection.replace("tiny_increment", "tiny_unsupported");
-    var selected = fixture.file("selection.xml");
+    var selected = try fixture.file("selection.xml");
     try checks.write(selected, selection);
     var rejected = try generate(fixture);
     try std.test.assert_ne(rejected.status(), 0);
@@ -191,27 +207,27 @@ module generator_tests {
       "name=\"value\" transfer-ownership=\"none\"",
       "name=\"value\" transfer-ownership=\"full\" nullable=\"1\" scope=\"notified\" closure=\"1\" destroy=\"2\""
     );
-    var gir = fixture.file("Tiny-1.0.gir");
+    var gir = try fixture.file("Tiny-1.0.gir");
     try checks.write(gir, source);
     var result = try generate(fixture);
     try checks.success(result);
-    var path = fixture.file("tiny.sun");
+    var path = try fixture.file("tiny.sun");
     var generated = try checks.read(path);
     try std.test.assert(generated.contains("tiny_increment(arg0: u32) u32;"));
     var a = make_heap_allocator();
-    var model_path = fixture.file("gir-model.json");
-    var model = try std.test.expect_json(parse_json(a, try checks.read(model_path)));
+    var model_path = try fixture.file("gir-model.json");
+    var model = try std.test.expect_json(std.json.parse_json(a, try checks.read(model_path)));
     try std.test.assert_eq(model.len(), 2);
-    var nodes: ref Json = try (try model.at(0)).get("nodes");
+    var nodes: ref std.json.Json = try (try model.at(0)).get("nodes");
     var found = false;
     for (var i: i64 = 0; i < nodes.len(); i += 1) {
-      var node: ref Json = try nodes.at(i);
+      var node: ref std.json.Json = try nodes.at(i);
       var parameter = false;
       if (true) {
         parameter = (try (try node.get("tag")).as_string()).equals_literal("parameter");
       }
       if (parameter and found == false) {
-        var attrs: ref Json = try node.get("attributes");
+        var attrs: ref std.json.Json = try node.get("attributes");
         try std.test.assert(
           (try (try attrs.get("transfer-ownership")).as_string()).equals_literal("full")
         );
@@ -228,24 +244,25 @@ module generator_tests {
   /** Resolves namespace URIs and rejects unbound or duplicate expanded names. */
   test_function namespace_prefixes() checks.Result<void> {
     var fixture = try checks.Fixture();
-    var unbound = String("<r><missing:child/></r>");
+    var unbound = try String("<r><missing:child/></r>");
     try xml(fixture, unbound, false);
-    var duplicate = String("<r xmlns:a=\"urn:x\" xmlns:b=\"urn:x\" a:x=\"1\" b:x=\"2\"/>");
+    var duplicate = try String("<r xmlns:a=\"urn:x\" xmlns:b=\"urn:x\" a:x=\"1\" b:x=\"2\"/>");
+
     try xml(fixture, duplicate, false);
-    var bom = String("");
-    bom.append_char(239);
-    bom.append_char(187);
-    bom.append_char(191);
-    bom.append("<r>text\r\ntext</r>");
+    var bom = try String("");
+    try bom.append_char(239);
+    try bom.append_char(187);
+    try bom.append_char(191);
+    try bom.append("<r>text\r\ntext</r>");
     try xml(fixture, bom, true);
     var source = try input("Tiny-1.0.gir");
     source.replace("xmlns:c=", "xmlns:native=");
     source.replace("c:", "native:");
-    var gir = fixture.file("Tiny-1.0.gir");
+    var gir = try fixture.file("Tiny-1.0.gir");
     try checks.write(gir, source);
     var result = try generate(fixture);
     try checks.success(result);
-    var path = fixture.file("tiny.sun");
+    var path = try fixture.file("tiny.sun");
     var generated = try checks.read(path);
     var golden = try input("tiny.expected.sun");
     try std.test.assert_eq(generated, golden);
@@ -256,7 +273,7 @@ module generator_tests {
     var fixture = try checks.Fixture();
     var source = try input("Tiny-1.0.gir");
     source.replace("name=\"Tiny\" version=\"1.0\"", "name=\"Tiny\" version=\"2.0\"");
-    var gir = fixture.file("Tiny-1.0.gir");
+    var gir = try fixture.file("Tiny-1.0.gir");
     try checks.write(gir, source);
     var result = try generate(fixture);
     try std.test.assert_ne(result.status(), 0);
@@ -268,7 +285,7 @@ module generator_tests {
     var fixture = try checks.Fixture();
     var selection = try input("selection.xml");
     selection.replace("1.0", "9.0");
-    var path = fixture.file("selection.xml");
+    var path = try fixture.file("selection.xml");
     try checks.write(path, selection);
     var result = try generate(fixture);
     try std.test.assert_ne(result.status(), 0);

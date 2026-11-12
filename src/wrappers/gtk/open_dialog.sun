@@ -32,7 +32,7 @@ public module gtk {
         this.parent = parent.raw_handle();
         gobject.raw.g_object_ref(this.parent);
         this.pointer = gtk_file_chooser_native_new(
-          title.c_str(),
+          try title.c_str(),
           this.parent,
           0,
           "Open",
@@ -81,7 +81,7 @@ public module gtk {
       var a = make_heap_allocator();
       var path = from_c_str(a, native_path);
       unsafe { g_free(native_path); };
-      return SystemResult.Ok(Option.Some(path));
+      return SystemResult.Ok(Option.Some(try path));
     }
 
     /** Cancels an active request and releases all native resources; repeated calls are harmless. */

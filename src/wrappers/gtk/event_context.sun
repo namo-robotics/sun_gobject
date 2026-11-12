@@ -12,12 +12,12 @@ public module gtk {
     var stopped: bool = false;
 
     /** Creates a dispatch-only context from private loop storage. */
-    init(core: LoopCore, current: RegistrationId, kind: u32) {
+    init(core: LoopCore, current: RegistrationId, kind: u32) AllocationResult<void> {
       this.core = core;
       this.current = current;
       this.event = kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer);
       var a = make_heap_allocator();
-      this.commands = Vec<EventCommand<State>>(a, 4);
+      this.commands = try Vec<EventCommand<State>>(a, 4);
     }
 
     /** Releases staged registrations on the main thread, including after callback failure. */
@@ -47,7 +47,7 @@ public module gtk {
     public method disconnect(id: const ref RegistrationId) SystemResult<void> {
       try validate_id(this.core, id);
       var command: EventCommand<State> = EventCommand.Remove(id.number);
-      this.commands.push(command);
+      try this.commands.push(command);
       return SystemResult.Ok;
     }
 
@@ -65,7 +65,7 @@ public module gtk {
       var number = try this.core.reserve();
       var handler = Handler<State>(number, 1, 0, unsafe { button.raw_handle(); }, callback);
       var command: EventCommand<State> = EventCommand.Add(handler);
-      this.commands.push(command);
+      try this.commands.push(command);
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
@@ -77,7 +77,7 @@ public module gtk {
       var number = try this.core.reserve();
       var handler = Handler<State>(number, 2, 0, unsafe { window.raw_handle(); }, callback);
       var command: EventCommand<State> = EventCommand.Add(handler);
-      this.commands.push(command);
+      try this.commands.push(command);
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
@@ -90,7 +90,7 @@ public module gtk {
       var command: EventCommand<State> = EventCommand.Add(
         Handler<State>(number, 3, delay_ms, null, callback)
       );
-      this.commands.push(command);
+      try this.commands.push(command);
       return SystemResult.Ok(registration_id(this.core, number));
     }
 
@@ -107,7 +107,7 @@ public module gtk {
       var command: EventCommand<State> = EventCommand.Add(
         Handler<State>(number, 4, interval_ms, null, callback)
       );
-      this.commands.push(command);
+      try this.commands.push(command);
       return SystemResult.Ok(registration_id(this.core, number));
     }
   }

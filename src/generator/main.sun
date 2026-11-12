@@ -2,36 +2,36 @@ using std;
 using sg;
 
 /** Parses generator options, validates selected declarations, and writes deterministic artifacts. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
   var a = make_heap_allocator();
-  var env = std.env.Env(a);
-  var args = env.args(argc, argv);
-  var repo = gir.Repository();
-  var selection = String("");
-  var output = String("");
-  var source_output = String("");
-  var target = String("");
-  var sun_revision = String("unknown");
-  var revision = String("unknown");
-  var overrides = String("");
+  var env = try std.env.Env(a);
+  var args = try env.args(argc, argv);
+  var repo = try gir.Repository();
+  var selection = try String("");
+  var output = try String("");
+  var source_output = try String("");
+  var target = try String("");
+  var sun_revision = try String("unknown");
+  var revision = try String("unknown");
+  var overrides = try String("");
   for (var i: i64 = 1; i < args.size(); i += 1) {
     if (args[i].equals_literal("--check-xml")) {
       if (i + 1 >= args.size()) {
         die("--check-xml requires a path");
       }
-      var path = args[i + 1].clone(a);
-      var data = read(path);
-      var doc = xml.Document(data, path);
-      doc.parse();
-      println("XML OK");
-      return 0;
+      var path = try args[i + 1].clone(a);
+      var data = try read(path);
+      var doc = try xml.Document(data, path);
+      try doc.parse();
+      std.io.println("XML OK");
+      return AllocationResult.Ok(0);
     }
     if (i + 1 >= args.size()) {
       die("option requires a value");
     }
-    var value = args[i + 1].clone(a);
+    var value = try args[i + 1].clone(a);
     if (args[i].equals_literal("--gir-dir")) {
-      repo.dirs.push(value);
+      try repo.dirs.push(value);
     } else if (args[i].equals_literal("--selection")) {
       selection = value;
     } else if (args[i].equals_literal("--output-dir")) {
@@ -59,51 +59,57 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     );
   }
   if (source_output.length() == 0) {
-    source_output = output.clone(a);
+    source_output = try output.clone(a);
   }
-  repo.dirs.push(String("/usr/share/gir-1.0"));
+  try repo.dirs.push(try String("/usr/share/gir-1.0"));
+
   if (target.equals_literal("x86_64-linux-gnu")) {
-    repo.dirs.push(String("/usr/lib/x86_64-linux-gnu/gir-1.0"));
+    try repo.dirs.push(try String("/usr/lib/x86_64-linux-gnu/gir-1.0"));
   }
-  var selection_data = read(selection);
-  var selection_hash = gir.sha256(selection_data);
-  var selected = xml.Document(selection_data, selection);
-  selected.parse();
+  var selection_data = try read(selection);
+  var selection_hash = try gir.sha256(selection_data);
+  var selected = try xml.Document(selection_data, selection);
+  try selected.parse();
   for (var i: i64 = 0; i < selected.nodes.size(); i += 1) {
     if (selected.nodes[i].name.equals_literal("namespace")) {
-      var name = selected.nodes[i].attr("name");
-      var version = selected.nodes[i].attr("version");
-      repo.load(name, version);
+      var name = try selected.nodes[i].attr("name");
+      var version = try selected.nodes[i].attr("version");
+      try repo.load(name, version);
     }
   }
-  var override_hash = String("");
+  var override_hash = try String("");
   if (overrides.length() > 0) {
-    var contents = read(overrides);
-    override_hash = gir.sha256(contents);
-    var patches = xml.Document(contents, overrides);
-    patches.parse();
+    var contents = try read(overrides);
+    override_hash = try gir.sha256(contents);
+    var patches = try xml.Document(contents, overrides);
+    try patches.parse();
     for (var p: i64 = 1; p < patches.nodes.size(); p += 1) {
       if (patches.nodes[p].name.equals_literal("set") == false) {
         die("unknown metadata override");
       }
-      var symbol = patches.nodes[p].attr("symbol");
-      var key = patches.nodes[p].attr("attribute");
-      var value = patches.nodes[p].attr("value");
+      var symbol = try patches.nodes[p].attr("symbol");
+      var key = try patches.nodes[p].attr("attribute");
+      var value = try patches.nodes[p].attr("value");
       var matches: i64 = 0;
       for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
         for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
-          var id = repo.docs[d].nodes[n].attr("c:identifier");
+          var id = try repo.docs[d].nodes[n].attr("c:identifier");
           if (id.equals(symbol)) {
             matches += 1;
             var changed = false;
             for (var j: i64 = 0; j < repo.docs[d].nodes[n].attributes.size(); j += 1) {
               if (repo.docs[d].nodes[n].attributes[j].name.equals(key)) {
-                repo.docs[d].nodes[n].attributes[j].value = value.clone(a);
+                repo.docs[d].nodes[n].attributes[j].value = try value.clone(a);
                 changed = true;
               }
             }
             if (changed == false) {
-              repo.docs[d].nodes[n].attributes.push(xml.Attribute(key.clone(a), value.clone(a)));
+              try repo.docs[d].nodes[n].attributes.push(
+                xml.Attribute(
+                  try key.clone(a),
+                  try value.clone(a)
+                )
+              );
             }
           }
         }
@@ -113,16 +119,16 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
       }
     }
   }
-  var files = Vec<String>(a, 8);
-  var contents = Vec<String>(a, 8);
-  var coverage = String("namespace\tsymbol\tstatus\treason\n");
+  var files = try Vec<String>(a, 8);
+  var contents = try Vec<String>(a, 8);
+  var coverage = try String("namespace\tsymbol\tstatus\treason\n");
   for (var s: i64 = 0; s < selected.nodes.size(); s += 1) {
     if (selected.nodes[s].name.equals_literal("namespace") == false) {
       continue;
     }
-    var ns = selected.nodes[s].attr("name");
-    var version = selected.nodes[s].attr("version");
-    var module_name = selected.nodes[s].attr("module");
+    var ns = try selected.nodes[s].attr("name");
+    var version = try selected.nodes[s].attr("version");
+    var module_name = try selected.nodes[s].attr("module");
     // Restrict module/output names to identifiers to prevent code/path injection.
     for (var i: i64 = 0; i < module_name.length(); i += 1) {
       var c = byte(module_name, i);
@@ -133,9 +139,9 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     if (module_name.length() == 0) {
       die("empty module name");
     }
-    var key = ns.clone(a);
-    key.append("-");
-    key.append(version);
+    var key = try ns.clone(a);
+    try key.append("-");
+    try key.append(version);
     var d: i64 = -1;
     for (var k: i64 = 0; k < repo.keys.size(); k += 1) {
       if (repo.keys[k].equals(key)) {
@@ -145,20 +151,22 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     if (d < 0) {
       die("namespace not loaded");
     }
-    var source = String(
+    var source = try String(
       "// Generated by sun-gir. Do not edit. Raw calls require unsafe.\npublic module "
     );
-    source.append(module_name);
-    source.append(".raw {\n\n");
-    source.append(
+
+    try source.append(module_name);
+    try source.append(".raw {\n\n");
+    try source.append(
       target.equals_literal("arm64-apple-darwin") ? "  _assert_c_target(\"arm64-apple-darwin\");\n" : "  _assert_c_target(\"x86_64-pc-linux-gnu\");\n"
     );
-    var emitted = Vec<String>(a, 32);
+
+    var emitted = try Vec<String>(a, 32);
     for (var f = s + 1; f < selected.nodes.size(); f += 1) {
       if (selected.nodes[f].parent != s) {
         continue;
       }
-      var symbol = selected.nodes[f].attr("symbol");
+      var symbol = try selected.nodes[f].attr("symbol");
       for (var k: i64 = 0; k < emitted.size(); k += 1) {
         if (emitted[k].equals(symbol)) {
           die("duplicate selected symbol");
@@ -166,23 +174,23 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
       }
       var found: i64 = -1;
       for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
-        var id = repo.docs[d].nodes[n].attr("c:identifier");
+        var id = try repo.docs[d].nodes[n].attr("c:identifier");
         if (id.equals(symbol)) {
           found = n;
           break;
         }
       }
       if (found < 0) {
-        var error = String("selected symbol not found: ");
-        error.append(symbol);
+        var error = try String("selected symbol not found: ");
+        try error.append(symbol);
         fail(error);
       }
-      var decl = gir.declaration(repo, repo.docs[d], found);
-      source.append(decl);
-      emitted.push(symbol);
+      var decl = try gir.declaration(repo, repo.docs[d], found);
+      try source.append(decl);
+      try emitted.push(symbol);
     }
     for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
-      var id = repo.docs[d].nodes[n].attr("c:identifier");
+      var id = try repo.docs[d].nodes[n].attr("c:identifier");
       if (id.length() == 0) {
         continue;
       }
@@ -192,103 +200,107 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
           chosen = true;
         }
       }
-      coverage.append(ns);
-      coverage.append("\t");
-      coverage.append(id);
-      coverage.append(
+      try coverage.append(ns);
+      try coverage.append("\t");
+      try coverage.append(id);
+      try coverage.append(
         chosen ? "\temitted\tselected and representable\n" : "\tunselected\toutside curated surface; ABI support not evaluated\n"
       );
     }
-    source.append("}\n");
-    var filename = module_name.clone(a);
-    filename.append(".sun");
-    files.push(filename);
-    contents.push(source);
+    try source.append("}\n");
+    var filename = try module_name.clone(a);
+    try filename.append(".sun");
+    try files.push(filename);
+    try contents.push(source);
   }
   // Preserve the full parsed GIR tree as JSON, including ownership, callback scope,
   // array lengths, properties, signals, inheritance and dependency types.
-  var model = String("[\n");
+  var model = try String("[\n");
   for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
     if (d > 0) {
-      model.append(",\n");
+      try model.append(",\n");
     }
-    model.append("{\"namespace\":");
-    var key = gir.quote(repo.keys[d]);
-    model.append(key);
-    model.append(",\"nodes\":[");
+    try model.append("{\"namespace\":");
+    var key = try gir.quote(repo.keys[d]);
+    try model.append(key);
+    try model.append(",\"nodes\":[");
     for (var n: i64 = 0; n < repo.docs[d].nodes.size(); n += 1) {
       if (n > 0) {
-        model.append(",");
+        try model.append(",");
       }
-      model.append("{\"tag\":");
-      var tag = gir.quote(repo.docs[d].nodes[n].name);
-      model.append(tag);
-      model.append(",\"parent\":");
-      model.append(repo.docs[d].nodes[n].parent);
-      model.append(",\"attributes\":{");
+      try model.append("{\"tag\":");
+      var tag = try gir.quote(repo.docs[d].nodes[n].name);
+      try model.append(tag);
+      try model.append(",\"parent\":");
+      try model.append(repo.docs[d].nodes[n].parent);
+      try model.append(",\"attributes\":{");
       for (var k: i64 = 0; k < repo.docs[d].nodes[n].attributes.size(); k += 1) {
         if (k > 0) {
-          model.append(",");
+          try model.append(",");
         }
-        var name = gir.quote(repo.docs[d].nodes[n].attributes[k].name);
-        var value = gir.quote(repo.docs[d].nodes[n].attributes[k].value);
-        model.append(name);
-        model.append(":");
-        model.append(value);
+        var name = try gir.quote(repo.docs[d].nodes[n].attributes[k].name);
+        var value = try gir.quote(repo.docs[d].nodes[n].attributes[k].value);
+        try model.append(name);
+        try model.append(":");
+        try model.append(value);
       }
-      model.append("}}");
+      try model.append("}}");
     }
-    model.append("]}");
+    try model.append("]}");
   }
-  model.append("\n]\n");
-  var provenance = String("{\"target\":");
-  var q = gir.quote(target);
-  provenance.append(q);
-  provenance.append(",\"sun_revision\":");
-  q = gir.quote(sun_revision);
-  provenance.append(q);
-  provenance.append(",\"generator_revision\":");
-  q = gir.quote(revision);
-  provenance.append(q);
-  provenance.append(",\"selection_sha256\":");
-  q = gir.quote(selection_hash);
-  provenance.append(q);
-  provenance.append(",\"overrides_sha256\":");
-  q = gir.quote(override_hash);
-  provenance.append(q);
-  provenance.append(",\"gir\":{");
+  try model.append("\n]\n");
+  var provenance = try String("{\"target\":");
+  var q = try gir.quote(target);
+  try provenance.append(q);
+  try provenance.append(",\"sun_revision\":");
+  q = try gir.quote(sun_revision);
+  try provenance.append(q);
+  try provenance.append(",\"generator_revision\":");
+  q = try gir.quote(revision);
+  try provenance.append(q);
+  try provenance.append(",\"selection_sha256\":");
+  q = try gir.quote(selection_hash);
+  try provenance.append(q);
+  try provenance.append(",\"overrides_sha256\":");
+  q = try gir.quote(override_hash);
+  try provenance.append(q);
+  try provenance.append(",\"gir\":{");
   for (var k: i64 = 0; k < repo.keys.size(); k += 1) {
     if (k > 0) {
-      provenance.append(",");
+      try provenance.append(",");
     }
-    q = gir.quote(repo.keys[k]);
-    provenance.append(q);
-    provenance.append(":");
-    q = gir.quote(repo.hashes[k]);
-    provenance.append(q);
+    q = try gir.quote(repo.keys[k]);
+    try provenance.append(q);
+    try provenance.append(":");
+    q = try gir.quote(repo.hashes[k]);
+    try provenance.append(q);
   }
-  provenance.append("}}\n");
-  files.push(String("coverage.tsv"));
-  contents.push(coverage);
-  files.push(String("gir-model.json"));
-  contents.push(model);
-  files.push(String("provenance.json"));
-  contents.push(provenance);
+  try provenance.append("}}\n");
+  try files.push(try String("coverage.tsv"));
+
+  try contents.push(coverage);
+  try files.push(try String("gir-model.json"));
+
+  try contents.push(model);
+  try files.push(try String("provenance.json"));
+
+  try contents.push(provenance);
   // Validate every declaration before touching output files.
   for (var i: i64 = 0; i < files.size(); i += 1) {
-    var path = output.clone(a);
+    var path = try output.clone(a);
     if (files[i].ends_with(".sun")) {
-      path = source_output.clone(a);
+      path = try source_output.clone(a);
     }
-    path.append("/");
-    path.append(files[i]);
+    try path.append("/");
+    try path.append(files[i]);
     write(path, contents[i]);
   }
-  println("GIR generation complete");
-  return 0;
+  std.io.println("GIR generation complete");
+  return AllocationResult.Ok(0);
 }
 manifest {
   source_files: [
+    "../results.sun",
     "common.sun",
     "xml.sun",
     "gir.sun"

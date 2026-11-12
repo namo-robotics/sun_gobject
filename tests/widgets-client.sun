@@ -38,27 +38,28 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
   var queue = try gtk.EventQueue(app);
   var entry_id = try queue.on_widget(entry);
   var select_id = try queue.on_widget(select);
-  var text = String("alpha");
+  var text = try String("alpha");
   try entry.edit(text, 0);
-  text = String("beta");
+  text = try String("beta");
   try entry.edit(text, 0);
-  var labels = String("First");
-  var key = String("stable-first");
+  var labels = try String("First");
+  var key = try String("stable-first");
   try select.clear_options();
   try select.add_option(labels, key);
-  labels = String("Second");
-  key = String("stable-second");
+  labels = try String("Second");
+  key = try String("stable-second");
   try select.add_option(labels, key);
   try select.set_value(0);
   try select.edit(text, 1);
   try select.clear_options();
-  labels = String("Replacement");
-  key = String("replacement");
+  labels = try String("Replacement");
+  key = try String("replacement");
   try select.add_option(labels, key);
   for (var i: i64 = 0; i < 3; i += 1) {
     match queue.next() {
       Option.Some(event) => {
-        var expected = String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
+        var expected = try String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
+
         if (not event.text.equals(expected)) {
           return SystemResult.Error(Error(1, "Native edit snapshot was changed before delivery"));
         }
@@ -68,7 +69,7 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
       }
     };
   }
-  text = String("programmatic");
+  text = try String("programmatic");
   try entry.set_text(text);
   match queue.next() {
     Option.None => {},
@@ -84,12 +85,12 @@ function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
 
 /** Checks ownership, validation, composition, drawing, and chooser cleanup using safe APIs. */
 function run() SystemResult<void> {
-  var id = String("org.sunlang.CheckedWidgetsTest");
+  var id = try String("org.sunlang.CheckedWidgetsTest");
   var app = try gtk.Application(id);
   var window = gtk.Window(app);
   var root = try gtk.Box(gtk.Orientation.Vertical, 8);
   var toolbar = try gtk.Box(gtk.Orientation.Horizontal, 8);
-  var text = String("Ready");
+  var text = try String("Ready");
   var label = try gtk.Label(text);
   var area = try gtk.DrawingArea();
   try toolbar.append(label);
@@ -108,8 +109,8 @@ function run() SystemResult<void> {
     },
     SystemResult.Error(_) => {}
   };
-  var invalid = String("bad");
-  invalid.append_char(0);
+  var invalid = try String("bad");
+  try invalid.append_char(0);
   match label.set_text(invalid) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
@@ -120,7 +121,7 @@ function run() SystemResult<void> {
   if (unchanged.equals_literal("Ready") == false) {
     return SystemResult.Error(Error(1, "Invalid text changed the label"));
   }
-  var malformed = String("<svg");
+  var malformed = try String("<svg");
   match svg.Document(malformed) {
     SystemResult.Ok(_) => {
       return SystemResult.Error(Error(1, "Malformed SVG was accepted"));
@@ -129,9 +130,10 @@ function run() SystemResult<void> {
   };
   // The area must retain its document after the source wrapper leaves scope.
   if (true) {
-    var content = String(
+    var content = try String(
       "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"><circle cx=\"100\" cy=\"50\" r=\"30\"/></svg>"
     );
+
     var document = try svg.Document(content);
     area.set_document(document);
   }
@@ -145,12 +147,12 @@ function run() SystemResult<void> {
   if (area.rendered() == false or area.render_failed()) {
     return SystemResult.Error(Error(1, "Retained document did not render"));
   }
-  eprintln("Drawing rendered; checking save dialog");
+  std.io.eprintln("Drawing rendered; checking save dialog");
   var chooser = gtk.SaveDialog();
-  var title = String("Save test");
-  var filename = String("test.svg");
+  var title = try String("Save test");
+  var filename = try String("test.svg");
   try chooser.show(window, title, filename);
-  eprintln("Save dialog shown; checking cancellation");
+  std.io.eprintln("Save dialog shown; checking cancellation");
   match chooser.show(window, title, filename) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent save request was accepted"));
@@ -168,10 +170,10 @@ function run() SystemResult<void> {
     },
     Option.None => {}
   };
-  eprintln("Save dialog cancelled; checking open dialog");
+  std.io.eprintln("Save dialog cancelled; checking open dialog");
   var open = gtk.OpenDialog();
   try open.show(window, title);
-  eprintln("Open dialog shown; checking cancellation");
+  std.io.eprintln("Open dialog shown; checking cancellation");
   match open.show(window, title) {
     SystemResult.Ok => {
       return SystemResult.Error(Error(1, "Concurrent open request was accepted"));
@@ -202,10 +204,10 @@ function run() SystemResult<void> {
     },
     SystemResult.Error(_) => {}
   };
-  eprintln("Dialogs closed; checking declarative widgets");
+  std.io.eprintln("Dialogs closed; checking declarative widgets");
   try declarative_widgets(app);
   try kept_media_sections(app);
-  println("Checked drawing widgets passed");
+  std.io.println("Checked drawing widgets passed");
   return SystemResult.Ok;
 }
 
@@ -213,11 +215,11 @@ function run() SystemResult<void> {
 function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
   var window = gtk.Window(app);
   var media = try gtk.Widget(10);
-  var path = String("");
+  var path = try String("");
   try media.media(path, 4000000, 0, 2000000, 0);
-  var ranges = String("1,0,2000000;2,2000000,4000000");
+  var ranges = try String("1,0,2000000;2,2000000,4000000");
   try media.media_ranges(ranges, 1);
-  var invalid = String("1,0,3000000;2,2000000,4000000");
+  var invalid = try String("1,0,3000000;2,2000000,4000000");
   match media.media_ranges(invalid, 1) {
     SystemResult.Error(_) => {},
     SystemResult.Ok => {
@@ -256,14 +258,16 @@ function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
 }
 
 /** Reports native wrapper acceptance failures to the parent test process. */
-function main() i32 {
-  return match run() {
-    SystemResult.Ok => 0,
-    SystemResult.Error(error) => {
-      eprintln(error.message());
-      return 1;
+function main() AllocationResult<i32> {
+  return AllocationResult.Ok(
+    match run() {
+      SystemResult.Ok => 0,
+      SystemResult.Error(error) => {
+        std.io.eprintln(try error.message());
+        return AllocationResult.Ok(1);
+      }
     }
-  };
+  );
 }
 manifest {
   libraries: [
