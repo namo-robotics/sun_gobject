@@ -24,15 +24,13 @@ public module gtk {
     }
 
     /** Rejects additions after completion or registration number exhaustion. */
-    method reserve() SystemResult<u64> {
+    method reserve() u64 throws {
       require_thread();
       var id = unsafe { sg_loop_reserve(this.pointer); };
       if (id == 0) {
-        return SystemResult.Error(
-          Error(1, "Event loop is finished or registration IDs are exhausted")
-        );
+        throw Error(1, "Event loop is finished or registration IDs are exhausted");
       }
-      return SystemResult.Ok(id);
+      return id;
     }
   }
 }

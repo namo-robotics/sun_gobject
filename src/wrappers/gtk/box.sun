@@ -8,13 +8,13 @@ public module gtk {
     var pointer: raw_ptr<u8> = null;
 
     /** Creates a layout container with nonnegative spacing between children. */
-    init(orientation: Orientation, spacing: i32) SystemResult<void> {
+    init(orientation: Orientation, spacing: i32) throws {
       require_thread();
       if (spacing < 0) {
-        return SystemResult.Error(Error(1, "Box spacing must be nonnegative"));
+        throw Error(1, "Box spacing must be nonnegative");
       }
       if (unsafe { gtk_init_check(); } == 0) {
-        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+        throw Error(1, "Cannot initialize the GTK display");
       }
       this.pointer = unsafe {
         raw.gtk_box_new(orientation == Orientation.Vertical ? 1 : 0, spacing);
@@ -37,49 +37,49 @@ public module gtk {
     }
 
     /** Adds an unparented widget after rejecting self-parenting and ancestor cycles. */
-    method append_handle(child: raw_ptr<u8>) SystemResult<void> {
+    method append_handle(child: raw_ptr<u8>) void throws {
       require_thread();
       if (child == this.pointer or unsafe { gtk_widget_is_ancestor(this.pointer, child); } != 0) {
-        return SystemResult.Error(Error(1, "Box parenting would create a cycle"));
+        throw Error(1, "Box parenting would create a cycle");
       }
       if (unsafe { gtk_widget_get_parent(child); } != null) {
-        return SystemResult.Error(Error(1, "Widget already has a parent"));
+        throw Error(1, "Widget already has a parent");
       }
       unsafe { raw.gtk_box_append(this.pointer, child); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Appends a button while both wrappers retain independent ownership. */
-    public method append(button: ref Button) SystemResult<void> {
+    public method append(button: ref Button) void throws {
       return this.append_handle(unsafe { button.raw_handle(); });
     }
 
     /** Appends a nested layout container after validating its parent. */
-    public method append(box: ref Box) SystemResult<void> {
+    public method append(box: ref Box) void throws {
       return this.append_handle(unsafe { box.raw_handle(); });
     }
 
     /** Appends an independently owned text label. */
-    public method append(label: ref Label) SystemResult<void> {
+    public method append(label: ref Label) void throws {
       return this.append_handle(unsafe { label.raw_handle(); });
     }
 
     /** Appends an independently owned vector drawing surface. */
-    public method append(area: ref DrawingArea) SystemResult<void> {
+    public method append(area: ref DrawingArea) void throws {
       return this.append_handle(unsafe { area.raw_handle(); });
     }
 
     /** Inserts or reorders a child after a validated sibling without unparenting it. */
-    method place(button: ref Button, sibling: raw_ptr<u8>) SystemResult<void> {
+    method place(button: ref Button, sibling: raw_ptr<u8>) void throws {
       require_thread();
       var child = unsafe { button.raw_handle(); };
       var parent = unsafe { gtk_widget_get_parent(child); };
       if (parent != null and parent != this.pointer) {
-        return SystemResult.Error(Error(1, "Button belongs to another parent"));
+        throw Error(1, "Button belongs to another parent");
       }
       if (sibling != null and
         (sibling == child or unsafe { gtk_widget_get_parent(sibling); } != this.pointer)) {
-        return SystemResult.Error(Error(1, "Sibling must be another child of this box"));
+        throw Error(1, "Sibling must be another child of this box");
       }
       if (parent == null) {
         unsafe { raw.gtk_box_append(this.pointer, child); };
@@ -87,16 +87,16 @@ public module gtk {
       if (unsafe { raw.gtk_widget_get_prev_sibling(child); } != sibling) {
         unsafe { raw.gtk_box_reorder_child_after(this.pointer, child, sibling); };
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Places a button first, retaining existing native identity and focus. */
-    public method place_first(button: ref Button) SystemResult<void> {
+    public method place_first(button: ref Button) void throws {
       return this.place(button, null);
     }
 
     /** Places a button after another child of this box. */
-    public method place_after(button: ref Button, previous: ref Button) SystemResult<void> {
+    public method place_after(button: ref Button, previous: ref Button) void throws {
       return this.place(button, unsafe { previous.raw_handle(); });
     }
 

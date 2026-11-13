@@ -8,13 +8,13 @@ public module gtk {
     var pointer: raw_ptr<u8> = null;
 
     /** Creates a label on the main thread, rejecting invalid text or unavailable displays. */
-    init(text: ref String) SystemResult<void> {
+    init(text: ref String) throws {
       require_thread();
-      try validate(text);
+      validate(text);
       if (unsafe { gtk_init_check(); } == 0) {
-        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+        throw Error(1, "Cannot initialize the GTK display");
       }
-      this.pointer = unsafe { gtk_label_new(try text.c_str()); };
+      this.pointer = unsafe { gtk_label_new(text.c_str()); };
       unsafe { gobject.raw.g_object_ref_sink(this.pointer); };
     }
 
@@ -27,20 +27,18 @@ public module gtk {
     }
 
     /** Copies validated text into the widget. */
-    public method set_text(text: ref String) SystemResult<void> {
+    public method set_text(text: ref String) void throws {
       require_thread();
-      try validate(text);
-      unsafe { gtk_label_set_text(this.pointer, try text.c_str()); };
-      return SystemResult.Ok;
+      validate(text);
+      unsafe { gtk_label_set_text(this.pointer, text.c_str()); };
+      return;
     }
 
     /** Copies the current label into Sun-owned storage. */
-    public const method text() std.AllocationResult<String> {
+    public const method text() String throws {
       require_thread();
       var a = make_heap_allocator();
-      return std.AllocationResult.Ok(
-        try from_c_str(a, unsafe { gtk_label_get_text(this.pointer); })
-      );
+      return from_c_str(a, unsafe { gtk_label_get_text(this.pointer); });
     }
 
     /** Borrows the handle only for code accepting GTK's native lifetime contract. */

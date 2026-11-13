@@ -4,73 +4,71 @@ using std;
 module build_tasks {
 
   /** Runs a command, preserving diagnostics and returning failure to the caller. */
-  function capture(command: ref std.process.Command) SystemResult<String> {
+  function capture(command: ref std.process.Command) String throws {
     var a = make_heap_allocator();
-    var output = try command.output();
+    var output = command.output();
     if (output.status() != 0) {
       std.io.eprintln(output.stdout());
       std.io.eprintln(output.stderr());
-      return SystemResult.Error(Error(output.status(), "Build command failed"));
+      throw Error(output.status(), "Build command failed");
     }
-    var text = try output.stdout().clone(a);
-    try text.append(output.stderr());
+    var text = output.stdout().clone(a);
+    text.append(output.stderr());
     text.trim();
-    return SystemResult.Ok(text);
+    return text;
   }
 
   /** Streams build diagnostics and returns a failed command status to the caller. */
-  function run(command: ref std.process.Command) SystemResult<void> {
-    var status = try command.status();
+  function run(command: ref std.process.Command) void throws {
+    var status = command.status();
     if (status != 0) {
-      return SystemResult.Error(Error(status, "Build command failed"));
+      throw Error(status, "Build command failed");
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Selects the requested compiler or the compiler on PATH. */
-  function compiler() AllocationResult<String> {
+  function compiler() String throws {
     var a = make_heap_allocator();
-    var env = try std.env.Env(a);
-    return AllocationResult.Ok(
-      match env.get("SUN_EXECUTABLE") {
-        Option.Some(value) => try value.clone(a),
-        Option.None => try String("sun")
-      }
-    );
+    var env = std.env.Env(a);
+    return match env.get("SUN_EXECUTABLE") {
+      Option.Some(value) => value.clone(a),
+      Option.None => String("sun")
+    };
   }
 
   /** Creates a compiler command with this project's bundle and native paths. */
-  function compile(native: bool) SystemResult<std.process.Command> {
+  function compile(native: bool) std.process.Command throws {
     var a = make_heap_allocator();
-    var executable = try compiler();
-    var command = try std.process.Command(a, executable);
-    try command.add_arg("--dynamic");
+    var executable = compiler();
+    var command = std.process.Command(a, executable);
+    command.add_arg("--dynamic");
     // This test harness explicitly keeps its native fixtures in build/.
-    try command.add_arg("--path-var");
-    try command.add_arg("SUN_BUILD=build");
-    try command.add_arg("--lib-path");
-    try command.add_arg("build");
+    command.add_arg("--path-var");
+    command.add_arg("SUN_BUILD=build");
+    command.add_arg("--lib-path");
+    command.add_arg("build");
     if (native) {
-      try command.add_arg("-Lbuild/native");
+      command.add_arg("-Lbuild/native");
     }
-    return SystemResult.Ok(command);
+    return command;
   }
 
   /** Adds system dependencies after static archives so the linker resolves their symbols. */
-  function link_gtk(command: ref std.process.Command) SystemResult<void> {
+  function link_gtk(command: ref std.process.Command) void throws {
     var a = make_heap_allocator();
-    var pkg = try std.process.Command(a, "pkg-config");
-    try pkg.add_arg("--libs");
-    try pkg.add_arg("gtk4");
-    try pkg.add_arg("gio-2.0");
-    var flags = try capture(pkg);
-    var words = try flags.split_whitespace(a);
+    var pkg = std.process.Command(a, "pkg-config");
+    pkg.add_arg("--libs");
+    pkg.add_arg("gtk4");
+    pkg.add_arg("gio-2.0");
+    var flags = capture(pkg);
+    var words = flags.split_whitespace(a);
     for (var word: ref String in words) {
-      try command.add_arg(word);
+      command.add_arg(word);
     }
-    try command.add_arg("-l:librsvg-2.so.2");
-    try command.add_arg("-lm");
-    return SystemResult.Ok;
+    command.add_arg("-l:librsvg-2.so.2");
+    command.add_arg("-lm");
+    return;
   }
 
   /** Forces relinking when a native dependency changed outside Sun's source cache. */
@@ -78,386 +76,457 @@ module build_tasks {
     command: ref std.process.Command,
     library: static_ptr<u8>,
     output: static_ptr<u8>
-  ) SystemResult<void> {
+  ) void throws {
     var a = make_heap_allocator();
-    var exists = try std.process.Command(a, "test");
-    try exists.add_arg("-f");
-    try exists.add_arg(library);
-    if (try exists.status() != 0) {
-      return SystemResult.Error(
-        Error(1, "Build native dependencies before compiling Sun programs")
-      );
+    var exists = std.process.Command(a, "test");
+    exists.add_arg("-f");
+    exists.add_arg(library);
+    if (exists.status() != 0) {
+      throw Error(1, "Build native dependencies before compiling Sun programs");
     }
-    var newer = try std.process.Command(a, "test");
-    try newer.add_arg(library);
-    try newer.add_arg("-nt");
-    try newer.add_arg(output);
-    if (try newer.status() == 0) {
-      try command.add_arg("--force-rebuild");
+    var newer = std.process.Command(a, "test");
+    newer.add_arg(library);
+    newer.add_arg("-nt");
+    newer.add_arg(output);
+    if (newer.status() == 0) {
+      command.add_arg("--force-rebuild");
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Writes text only when it changed, preserving incremental test freshness. */
-  function write(path: ref String, value: ref String) SystemResult<void> {
+  function write(path: ref String, value: ref String) void throws {
     var a = make_heap_allocator();
-    match std.io.read_to_string(a, path) {
-      SystemResult.Ok(previous) => {
-        if (previous.equals(value)) {
-          return SystemResult.Ok;
-        }
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+
+    var operation_completed_5 = false;
+    try {
+      var previous = std.io.read_to_string(a, path);
+      operation_completed_5 = true;
+      if (previous.equals(value)) {
+        return;
       }
-    };
+    } catch (error: std.Error) {
+      if (operation_completed_5) {
+        throw;
+      }
+    }
+
     return std.io.write_string(path, value);
   }
 
   /** Escapes a filesystem path for insertion into generated Sun string literals. */
-  function quote_path(value: ref String) AllocationResult<void> {
-    try value.replace("\\", "\\\\");
-    try value.replace("\"", "\\\"");
-    return AllocationResult.Ok;
+  function quote_path(value: ref String) void throws {
+    value.replace("\\", "\\\\");
+    value.replace("\"", "\\\"");
+    return;
   }
 
   /** Records compiler and source provenance and generates test path constants. */
-  public function prepare() SystemResult<String> {
+  public function prepare() String throws {
     var a = make_heap_allocator();
-    var mkdir = try std.process.Command(a, "mkdir");
-    try mkdir.add_arg("-p");
-    try mkdir.add_arg("build/generated");
-    try mkdir.add_arg("build/generated/sources");
-    try mkdir.add_arg("tmp");
-    try run(mkdir);
-    var pwd = try std.process.Command(a, "pwd");
-    var root = try capture(pwd);
-    var executable = try compiler();
-    var locate = try std.process.Command(a, "which");
-    try locate.add_arg(executable);
-    var compiler_path = try capture(locate);
-    var template_path = try String("tests/build_config.sun.in");
-    var template = try std.io.read_to_string(a, template_path);
-    var build = try root.clone(a);
-    try build.append("/build");
-    try quote_path(root);
-    try quote_path(build);
-    try quote_path(compiler_path);
-    var root_key = try String("@WORKSPACE_ROOT@");
-    try template.replace(root_key, root);
-    var build_key = try String("@BUILD_DIR@");
-    try template.replace(build_key, build);
-    var compiler_key = try String("@SUN_COMPILER@");
-    try template.replace(compiler_key, compiler_path);
-    var config_path = try String("build/test-config.sun");
-    try write(config_path, template);
-    var version = try std.process.Command(a, executable);
-    try version.add_arg("--version");
-    var text = try capture(version);
-    var version_path = try String("build/sun-version.txt");
-    try write(version_path, text);
-    return SystemResult.Ok(text);
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg("build/generated");
+    mkdir.add_arg("build/generated/sources");
+    mkdir.add_arg("tmp");
+    run(mkdir);
+    var pwd = std.process.Command(a, "pwd");
+    var root = capture(pwd);
+    var executable = compiler();
+    var locate = std.process.Command(a, "which");
+    locate.add_arg(executable);
+    var compiler_path = capture(locate);
+    var template_path = String("tests/build_config.sun.in");
+    var template = std.io.read_to_string(a, template_path);
+    var build = root.clone(a);
+    build.append("/build");
+    quote_path(root);
+    quote_path(build);
+    quote_path(compiler_path);
+    var root_key = String("@WORKSPACE_ROOT@");
+    template.replace(root_key, root);
+    var build_key = String("@BUILD_DIR@");
+    template.replace(build_key, build);
+    var compiler_key = String("@SUN_COMPILER@");
+    template.replace(compiler_key, compiler_path);
+    var config_path = String("build/test-config.sun");
+    write(config_path, template);
+    var version = std.process.Command(a, executable);
+    version.add_arg("--version");
+    var text = capture(version);
+    var version_path = String("build/sun-version.txt");
+    write(version_path, text);
+    return text;
   }
 
   /** Checks XML support before compiling products that require it. */
-  function check_xml() SystemResult<void> {
+  function check_xml() void throws {
     var a = make_heap_allocator();
-    var executable = try compiler();
-    var probe = try std.process.Command(a, executable);
-    try probe.add_arg("--dynamic");
-    try probe.add_arg("-c");
-    try probe.add_arg("-o");
-    try probe.add_arg("build/xml_probe");
-    try probe.add_arg("tools/xml_probe.sun");
-    if (try probe.status() != 0) {
-      return SystemResult.Error(
-        Error(
-          1,
-          "XML support is required. Update the Sun development package or set SUN_EXECUTABLE to a compiler with std.xml.XmlReader."
-        )
+    var executable = compiler();
+    var probe = std.process.Command(a, executable);
+    probe.add_arg("--dynamic");
+    probe.add_arg("-c");
+    probe.add_arg("-o");
+    probe.add_arg("build/xml_probe");
+    probe.add_arg("tools/xml_probe.sun");
+    if (probe.status() != 0) {
+      throw Error(
+        1,
+        "XML support is required. Update the Sun development package or set SUN_EXECUTABLE to a compiler with std.xml.XmlReader."
       );
     }
-    var check = try std.process.Command(a, "build/xml_probe");
+    var check = std.process.Command(a, "build/xml_probe");
     return run(check);
   }
 
   /** Builds the generator, regenerates bindings, and compiles Sun bundles and programs. */
-  public function build() SystemResult<void> {
+  public function build() void throws {
     var a = make_heap_allocator();
-    var version = try prepare();
-    try check_xml();
+    var version = prepare();
+    check_xml();
     std.io.println("Compiling GIR generator");
-    var generator = try compile(false);
-    try generator.add_arg("-lglib-2.0");
-    try generator.add_arg("-c");
-    try generator.add_arg("-o");
-    try generator.add_arg("build/sun_gir");
-    try generator.add_arg("src/generator/main.sun");
-    try run(generator);
-    var revision_command = try std.process.Command(a, "git");
-    try revision_command.add_arg("rev-parse");
-    try revision_command.add_arg("HEAD");
-    var revision = match capture(revision_command) {
-      SystemResult.Ok(value) => value,
-      SystemResult.Error(_) => try String("unversioned"),
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    var generator = compile(false);
+    generator.add_arg("-lglib-2.0");
+    generator.add_arg("-c");
+    generator.add_arg("-o");
+    generator.add_arg("build/sun_gir");
+    generator.add_arg("src/generator/main.sun");
+    run(generator);
+    var revision_command = std.process.Command(a, "git");
+    revision_command.add_arg("rev-parse");
+    revision_command.add_arg("HEAD");
+    var revision_outcome: std.Option<String> = std.Option.None;
+
+    try {
+      var value = capture(revision_command);
+
+      revision_outcome = std.Option.Some(value);
+    } catch (error: std.Error) {
+      revision_outcome = std.Option.Some(String("unversioned"));
+    }
+
+    var revision = match revision_outcome {
+      std.Option.Some(value) => value,
+      std.Option.None => {
+        throw std.Error(1, "Exception handler produced no value");
       }
     };
     // Hash a sorted source list so local edits are recorded in provenance.
-    var sorted = try std.process.Command(a, "sh");
-    try sorted.add_arg("-eu");
-    try sorted.add_arg("-c");
-    try sorted.add_arg(
+    var sorted = std.process.Command(a, "sh");
+    sorted.add_arg("-eu");
+    sorted.add_arg("-c");
+    sorted.add_arg(
       "LC_ALL=C; export LC_ALL; sha256sum src/generator/*.sun > tmp/generator-sources.sha256; sha256sum tmp/generator-sources.sha256"
     );
-    var hash_output = try capture(sorted);
-    var words = try hash_output.split_whitespace(a);
-    try revision.append(":sources-sha256=");
-    try revision.append(words[0]);
+    var hash_output = capture(sorted);
+    var words = hash_output.split_whitespace(a);
+    revision.append(":sources-sha256=");
+    revision.append(words[0]);
     std.io.println("Generating bindings");
-    var generate = try std.process.Command(a, "build/sun_gir");
-    try generate.add_arg("--selection");
-    try generate.add_arg("src/bindings/selection.xml");
-    try generate.add_arg("--overrides");
-    try generate.add_arg("src/bindings/overrides.xml");
-    try generate.add_arg("--output-dir");
-    try generate.add_arg("build/generated");
-    try generate.add_arg("--source-dir");
-    try generate.add_arg("build/generated/sources");
-    try generate.add_arg("--target");
-    try generate.add_arg("x86_64-linux-gnu");
-    try generate.add_arg("--sun-revision");
-    try generate.add_arg(version);
-    try generate.add_arg("--generator-revision");
-    try generate.add_arg(revision);
-    try run(generate);
+    var generate = std.process.Command(a, "build/sun_gir");
+    generate.add_arg("--selection");
+    generate.add_arg("src/bindings/selection.xml");
+    generate.add_arg("--overrides");
+    generate.add_arg("src/bindings/overrides.xml");
+    generate.add_arg("--output-dir");
+    generate.add_arg("build/generated");
+    generate.add_arg("--source-dir");
+    generate.add_arg("build/generated/sources");
+    generate.add_arg("--target");
+    generate.add_arg("x86_64-linux-gnu");
+    generate.add_arg("--sun-revision");
+    generate.add_arg(version);
+    generate.add_arg("--generator-revision");
+    generate.add_arg(revision);
+    run(generate);
     std.io.println("Compiling Sun bundles");
-    var core = try compile(false);
-    try core.add_arg("--emit-moon");
-    try core.add_arg("-o");
-    try core.add_arg("build/sun_gobject.moon");
-    try core.add_arg("src/sun_gobject.sun");
-    try run(core);
-    var gtk = try compile(false);
-    try gtk.add_arg("--emit-moon");
-    try gtk.add_arg("-o");
-    try gtk.add_arg("build/sun_gtk.moon");
-    try gtk.add_arg("src/sun_gtk.sun");
-    try run(gtk);
-    var capture_bundle = try compile(false);
-    try capture_bundle.add_arg("--emit-moon");
-    try capture_bundle.add_arg("-o");
-    try capture_bundle.add_arg("build/sun_capture.moon");
-    try capture_bundle.add_arg("src/sun_capture.sun");
-    try run(capture_bundle);
-    var capture_tests = try compile(true);
-    try capture_tests.add_arg("-lsun_capture_test_support");
-    try capture_tests.add_arg("-lsun_capture_native");
-    var capture_pkg = try std.process.Command(a, "pkg-config");
-    try capture_pkg.add_arg("--libs");
-    try capture_pkg.add_arg("gio-unix-2.0");
-    try capture_pkg.add_arg("gstreamer-1.0");
-    try capture_pkg.add_arg("gstreamer-video-1.0");
-    try capture_pkg.add_arg("x11");
-    try capture_pkg.add_arg("xext");
-    var capture_flags = try capture(capture_pkg);
-    var capture_words = try capture_flags.split_whitespace(a);
+    var core = compile(false);
+    core.add_arg("--emit-moon");
+    core.add_arg("-o");
+    core.add_arg("build/sun_gobject.moon");
+    core.add_arg("src/sun_gobject.sun");
+    run(core);
+    var gtk = compile(false);
+    gtk.add_arg("--emit-moon");
+    gtk.add_arg("-o");
+    gtk.add_arg("build/sun_gtk.moon");
+    gtk.add_arg("src/sun_gtk.sun");
+    run(gtk);
+    var capture_bundle = compile(false);
+    capture_bundle.add_arg("--emit-moon");
+    capture_bundle.add_arg("-o");
+    capture_bundle.add_arg("build/sun_capture.moon");
+    capture_bundle.add_arg("src/sun_capture.sun");
+    run(capture_bundle);
+    var capture_tests = compile(true);
+    capture_tests.add_arg("-lsun_capture_test_support");
+    capture_tests.add_arg("-lsun_capture_native");
+    var capture_pkg = std.process.Command(a, "pkg-config");
+    capture_pkg.add_arg("--libs");
+    capture_pkg.add_arg("gio-unix-2.0");
+    capture_pkg.add_arg("gstreamer-1.0");
+    capture_pkg.add_arg("gstreamer-video-1.0");
+    capture_pkg.add_arg("x11");
+    capture_pkg.add_arg("xext");
+    var capture_flags = capture(capture_pkg);
+    var capture_words = capture_flags.split_whitespace(a);
     for (var flag: ref String in capture_words) {
-      try capture_tests.add_arg(flag);
+      capture_tests.add_arg(flag);
     }
-    try capture_tests.add_arg("--force-rebuild");
-    try capture_tests.add_arg("-c");
-    try capture_tests.add_arg("-o");
-    try capture_tests.add_arg("build/capture_tests");
-    try capture_tests.add_arg("tests/capture.sun");
-    try run(capture_tests);
+    capture_tests.add_arg("--force-rebuild");
+    capture_tests.add_arg("-c");
+    capture_tests.add_arg("-o");
+    capture_tests.add_arg("build/capture_tests");
+    capture_tests.add_arg("tests/capture.sun");
+    run(capture_tests);
     std.io.println("Compiling GTK demo");
-    var demo = try compile(true);
-    try demo.add_arg("-l:libsun_gobject_native.a");
-    try link_gtk(demo);
-    try demo.add_arg("-c");
-    try demo.add_arg("-o");
-    try demo.add_arg("build/gtk-demo");
-    try native_dependency(demo, "build/native/libsun_gobject_native.a", "build/gtk-demo");
-    try demo.add_arg("examples/gtk-demo.sun");
-    try run(demo);
+    var demo = compile(true);
+    demo.add_arg("-l:libsun_gobject_native.a");
+    link_gtk(demo);
+    demo.add_arg("-c");
+    demo.add_arg("-o");
+    demo.add_arg("build/gtk-demo");
+    native_dependency(demo, "build/native/libsun_gobject_native.a", "build/gtk-demo");
+    demo.add_arg("examples/gtk-demo.sun");
+    run(demo);
     std.io.println("Compiling event test client");
-    var events = try compile(true);
-    try events.add_arg("-lsun_gobject_test_support");
-    try link_gtk(events);
-    try events.add_arg("-c");
-    try events.add_arg("-o");
-    try events.add_arg("build/event-client");
-    try native_dependency(
+    var events = compile(true);
+    events.add_arg("-lsun_gobject_test_support");
+    link_gtk(events);
+    events.add_arg("-c");
+    events.add_arg("-o");
+    events.add_arg("build/event-client");
+    native_dependency(
       events,
       "build/native/libsun_gobject_test_support.a",
       "build/event-client"
     );
-    try events.add_arg("tests/event-client.sun");
-    try run(events);
+    events.add_arg("tests/event-client.sun");
+    run(events);
     std.io.println("Compiling drawing widget test client");
-    var widgets = try compile(true);
-    try widgets.add_arg("-l:libsun_gobject_native.a");
-    try link_gtk(widgets);
-    try widgets.add_arg("-c");
-    try widgets.add_arg("-o");
-    try widgets.add_arg("build/widgets-client");
-    try native_dependency(widgets, "build/native/libsun_gobject_native.a", "build/widgets-client");
-    try widgets.add_arg("tests/widgets-client.sun");
-    try run(widgets);
+    var widgets = compile(true);
+    widgets.add_arg("-l:libsun_gobject_native.a");
+    link_gtk(widgets);
+    widgets.add_arg("-c");
+    widgets.add_arg("-o");
+    widgets.add_arg("build/widgets-client");
+    native_dependency(widgets, "build/native/libsun_gobject_native.a", "build/widgets-client");
+    widgets.add_arg("tests/widgets-client.sun");
+    run(widgets);
     std.io.println("Compiling Sun tests");
-    var tests = try compile(true);
-    try tests.add_arg("-lsun_gobject_test_support");
-    try link_gtk(tests);
-    try tests.add_arg("-c");
-    try tests.add_arg("-o");
-    try tests.add_arg("build/sun_gobject_tests");
-    try native_dependency(
+    var tests = compile(true);
+    tests.add_arg("-lsun_gobject_test_support");
+    link_gtk(tests);
+    tests.add_arg("-c");
+    tests.add_arg("-o");
+    tests.add_arg("build/sun_gobject_tests");
+    native_dependency(
       tests,
       "build/native/libsun_gobject_test_support.a",
       "build/sun_gobject_tests"
     );
-    try tests.add_arg("tests/main.sun");
-    try run(tests);
-    return SystemResult.Ok;
+    tests.add_arg("tests/main.sun");
+    run(tests);
+    return;
   }
 
   /** Installs Sun products alongside the independently installed native library. */
-  public function install(prefix: ref String) SystemResult<void> {
+  public function install(prefix: ref String) void throws {
     var a = make_heap_allocator();
-    var native = try std.process.Command(a, "cmake");
-    try native.add_arg("--install");
-    try native.add_arg("build/native");
-    try native.add_arg("--prefix");
-    try native.add_arg(prefix);
-    try run(native);
-    var lib = try prefix.clone(a);
-    try lib.append("/lib/sun");
-    var bin = try prefix.clone(a);
-    try bin.append("/bin");
-    var mkdir = try std.process.Command(a, "mkdir");
-    try mkdir.add_arg("-p");
-    try mkdir.add_arg(lib);
-    try mkdir.add_arg(bin);
-    try run(mkdir);
-    var bundles = try std.process.Command(a, "install");
-    try bundles.add_arg("-m644");
-    try bundles.add_arg("build/sun_gobject.moon");
-    try bundles.add_arg("build/sun_gtk.moon");
-    try bundles.add_arg("build/sun_capture.moon");
-    try bundles.add_arg(lib);
-    try run(bundles);
-    var generator = try std.process.Command(a, "install");
-    try generator.add_arg("-m755");
-    try generator.add_arg("build/sun_gir");
-    try generator.add_arg(bin);
-    try run(generator);
-    return SystemResult.Ok;
+    var native = std.process.Command(a, "cmake");
+    native.add_arg("--install");
+    native.add_arg("build/native");
+    native.add_arg("--prefix");
+    native.add_arg(prefix);
+    run(native);
+    var lib = prefix.clone(a);
+    lib.append("/lib/sun");
+    var bin = prefix.clone(a);
+    bin.append("/bin");
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg(lib);
+    mkdir.add_arg(bin);
+    run(mkdir);
+    var bundles = std.process.Command(a, "install");
+    bundles.add_arg("-m644");
+    bundles.add_arg("build/sun_gobject.moon");
+    bundles.add_arg("build/sun_gtk.moon");
+    bundles.add_arg("build/sun_capture.moon");
+    bundles.add_arg(lib);
+    run(bundles);
+    var generator = std.process.Command(a, "install");
+    generator.add_arg("-m755");
+    generator.add_arg("build/sun_gir");
+    generator.add_arg(bin);
+    run(generator);
+    return;
   }
 }
 
 /** Dispatches Sun-only build, test, or installation work from the workspace root. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
-  var result: SystemResult<void> = SystemResult.Ok;
-  if (args.size() == 1 or (args.size() == 2 and args[1].equals_literal("build"))) {
-    result = build_tasks.build();
-  } else if (args.size() == 2 and args[1].equals_literal("prepare")) {
-    result = match build_tasks.prepare() {
-      SystemResult.Ok(_) => SystemResult.Ok,
-      SystemResult.Error(error) => SystemResult.Error(error),
-      SystemResult.Allocation(error) => SystemResult.Allocation(error),
-      SystemResult.InvalidArgument(error) => SystemResult.InvalidArgument(error),
-      SystemResult.Overflow(error) => SystemResult.Overflow(error)
-    };
-  } else if (args.size() == 3 and args[1].equals_literal("install")) {
-    result = build_tasks.install(args[2]);
-  } else if (args.size() == 2 and args[1].equals_literal("test")) {
-    var media = try std.process.Command(a, "xvfb-run");
-    try media.add_arg("-a");
-    try media.add_arg("build/native/media-seek-tests");
-    match media.status() {
-      SystemResult.Ok(status) => {
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  try {
+    if (args.size() == 1 or (args.size() == 2 and args[1].equals_literal("build"))) {
+      build_tasks.build();
+    } else if (args.size() == 2 and args[1].equals_literal("prepare")) {
+      build_tasks.prepare();
+    } else if (args.size() == 3 and args[1].equals_literal("install")) {
+      build_tasks.install(args[2]);
+    } else if (args.size() == 2 and args[1].equals_literal("test")) {
+      var media = std.process.Command(a, "xvfb-run");
+      media.add_arg("-a");
+      media.add_arg("build/native/media-seek-tests");
+
+      var operation_completed_3 = false;
+      try {
+        var status = media.status();
+        operation_completed_3 = true;
         if (status != 0) {
-          return AllocationResult.Ok(status);
+          return status;
         }
-      },
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
+      } catch (error: std.Error) {
+        if (operation_completed_3) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.AllocationError) {
+        if (operation_completed_3) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.InvalidArgumentError) {
+        if (operation_completed_3) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.OverflowError) {
+        if (operation_completed_3) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
       }
-    };
-    var window_test = try std.process.Command(a, "build/native/capture-window-tests");
-    match window_test.status() {
-      SystemResult.Ok(status) => {
+
+      var window_test = std.process.Command(a, "build/native/capture-window-tests");
+
+      var operation_completed_2 = false;
+      try {
+        var status = window_test.status();
+        operation_completed_2 = true;
         if (status != 0) {
-          return AllocationResult.Ok(status);
+          return status;
         }
-      },
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
+      } catch (error: std.Error) {
+        if (operation_completed_2) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.AllocationError) {
+        if (operation_completed_2) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.InvalidArgumentError) {
+        if (operation_completed_2) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.OverflowError) {
+        if (operation_completed_2) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
       }
-    };
-    std.io.println("Running Sun tests");
-    var tests = try std.process.Command(a, "build/sun_gobject_tests_test");
-    // Separate Xvfb launchers must not compete for display numbers.
-    try tests.add_arg("--test-sequential");
-    match tests.status() {
-      SystemResult.Ok(status) => {
+
+      std.io.println("Running Sun tests");
+      var tests = std.process.Command(a, "build/sun_gobject_tests_test");
+      // Separate Xvfb launchers must not compete for display numbers.
+      tests.add_arg("--test-sequential");
+
+      var operation_completed_1 = false;
+      try {
+        var status = tests.status();
+        operation_completed_1 = true;
         if (status != 0) {
-          return AllocationResult.Ok(status);
+          return status;
         }
-        var capture_tests = try std.process.Command(a, "dbus-run-session");
-        try capture_tests.add_arg("--");
-        try capture_tests.add_arg("xvfb-run");
-        try capture_tests.add_arg("-a");
-        try capture_tests.add_arg("build/capture_tests_test");
-        try capture_tests.add_arg("--test-sequential");
-        return AllocationResult.Ok(
-          match capture_tests.status() {
-            SystemResult.Ok(code) => code,
-            (error: const ref IError) => {
-              std.io.eprintln(try error.message());
-              return AllocationResult.Ok(1);
-            }
-          }
-        );
-      },
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
+        var capture_tests = std.process.Command(a, "dbus-run-session");
+        capture_tests.add_arg("--");
+        capture_tests.add_arg("xvfb-run");
+        capture_tests.add_arg("-a");
+        capture_tests.add_arg("build/capture_tests_test");
+        capture_tests.add_arg("--test-sequential");
+        try {
+          var code = capture_tests.status();
+          return code;
+        } catch (error: std.Error) {
+          std.io.eprintln(error.message());
+          return 1;
+        } catch (error: std.AllocationError) {
+          std.io.eprintln(error.message());
+          return 1;
+        } catch (error: std.InvalidArgumentError) {
+          std.io.eprintln(error.message());
+          return 1;
+        } catch (error: std.OverflowError) {
+          std.io.eprintln(error.message());
+          return 1;
+        }
+      } catch (error: std.Error) {
+        if (operation_completed_1) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.AllocationError) {
+        if (operation_completed_1) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.InvalidArgumentError) {
+        if (operation_completed_1) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
+      } catch (error: std.OverflowError) {
+        if (operation_completed_1) {
+          throw;
+        }
+        std.io.eprintln(error.message());
+        return 1;
       }
-    };
-  } else {
-    std.io.eprintln("Usage: sun tools/build.sun -- [prepare|build|test|install PREFIX]");
-    return AllocationResult.Ok(1);
-  }
-  return AllocationResult.Ok(
-    match result {
-      SystemResult.Ok => 0,
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
-      }
+    } else {
+      std.io.eprintln("Usage: sun tools/build.sun -- [prepare|build|test|install PREFIX]");
+      return 1;
     }
-  );
+
+    return 0;
+  } catch (error: std.Error) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.AllocationError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.InvalidArgumentError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.OverflowError) {
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   source_files: [

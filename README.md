@@ -63,7 +63,7 @@ Use `./scripts/bootstrap-sun.sh --update` to update the mutable dev release, or
 `SUN_EXECUTABLE=/absolute/path/to/sun ./build.sh` to select an installation with a
 matching standard library.
 
-The current baseline is Sun `0.dev (fc9a5b23cc63)`. Update the rolling development package explicitly with
+Use a Sun compiler with bounded exceptions and its matching standard library. Update the rolling development package explicitly with
 `./scripts/bootstrap-sun.sh --update`; rebuild all bundles together after a
 compiler update.
 
@@ -114,8 +114,8 @@ choosing render batches and shutdown policy. For example, after creating `app`
 and `button`:
 
 ```sun
-var events = try gtk.EventQueue(app);
-var clicked = try events.on_clicked(button);
+var events = gtk.EventQueue(app);
+var clicked = events.on_clicked(button);
 events.iterate(false);
 var event = events.next();
 ```
@@ -138,10 +138,9 @@ application state and register named callbacks with the optional imperative
 
 ```sun
 /** Updates the button after native signal dispatch has returned. */
-function clicked(state: ref AppState, context: ref gtk.EventContext<AppState>) SystemResult<void> {
+function clicked(state: ref AppState, context: ref gtk.EventContext<AppState>) void throws {
   var greeting = String("Hello from Sun!");
-  try state.button.set_label(greeting);
-  return SystemResult.Ok;
+  state.button.set_label(greeting);
 }
 ```
 
@@ -150,8 +149,8 @@ loop and borrow the state for the duration of `run()`:
 
 ```sun
 var loop = gtk.EventLoop<AppState>(app);
-var click_id = try loop.on_clicked(state.button, clicked);
-try loop.run(state);
+var click_id = loop.on_clicked(state.button, clicked);
+loop.run(state);
 ```
 
 See [examples/gtk-demo.sun](examples/gtk-demo.sun) for the complete runnable program.

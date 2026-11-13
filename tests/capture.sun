@@ -37,191 +37,166 @@ module capture_binding_tests {
   }
 
   /** Waits for one portal response with a bounded deadline. */
-  function response(portal: ref desktop.Portal) SystemResult<i32> {
+  function response(portal: ref desktop.Portal) i32 throws {
     var start = std.time.now();
     while (start.elapsed().as_secs() < 3) {
-      var event = try portal.poll();
+      var event = portal.poll();
       if (event != 0) {
-        return SystemResult.Ok(event);
+        return event;
       }
       std.time.sleep(std.time.create_duration_millis(2));
     }
-    return SystemResult.Error(Error(1, "Portal response timed out"));
+    throw Error(1, "Portal response timed out");
   }
 
   /** Exercises responses delivered before method returns, geometry, descriptors, and cleanup. */
-  test_function portal_round_trip() std.test.AssertionResult<void> {
+  test_function portal_round_trip() {
     var mock = Mock(0);
     if (true) {
       var portal = desktop.Portal();
       for (var step: i32 = 0; step < 3; step += 1) {
-        try portal.request(step, false, true);
-        try std.test.assert_eq(try response(portal), 1);
+        portal.request(step, false, true);
+        std.test.assert_eq(response(portal), 1);
       }
-      try std.test.assert_eq(try portal.geometry(2), 320);
-      try std.test.assert_eq(try portal.geometry(3), 240);
-      try std.test.assert((try portal.target(false)).equals_literal("42"));
-      try std.test.assert((try portal.target(true)).equals_literal("123456"));
-      try std.test.assert(try portal.remote() >= 0);
-      try std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 0); }, 3);
+      std.test.assert_eq(portal.geometry(2), 320);
+      std.test.assert_eq(portal.geometry(3), 240);
+      std.test.assert((portal.target(false)).equals_literal("42"));
+      std.test.assert((portal.target(true)).equals_literal("123456"));
+      std.test.assert(portal.remote() >= 0);
+      std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 0); }, 3);
     }
-    try std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 1); }, 1);
-    return std.test.AssertionResult.Ok;
+    std.test.assert_eq(unsafe { sg_capture_test_count(mock.pointer, 1); }, 1);
+    return;
   }
 
   /** Portal cancellation is distinct from denied permission and malformed responses. */
-  test_function portal_cancel_and_failure() std.test.AssertionResult<void> {
+  test_function portal_cancel_and_failure() {
     for (var mode: i32 = 1; mode <= 4; mode += 1) {
       var mock = Mock(mode);
       var portal = desktop.Portal();
-      try portal.request(0, false, true);
+      portal.request(0, false, true);
       if (mode == 1) {
-        try std.test.assert_eq(try response(portal), 2);
+        std.test.assert_eq(response(portal), 2);
       } else if (mode == 2) {
-        match response(portal) {
-          SystemResult.Ok(_) => {
-            try std.test.fail("Permission denial was accepted");
-          },
-          SystemResult.Error(_) => {},
-          SystemResult.Allocation(error) => {
-            return std.test.AssertionResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return std.test.AssertionResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return std.test.AssertionResult.Overflow(error);
+        var operation_completed_5 = false;
+        try {
+          response(portal);
+          operation_completed_5 = true;
+          std.test.fail("Permission denial was accepted");
+        } catch (error: std.Error) {
+          if (operation_completed_5) {
+            throw;
           }
-        };
+        }
       } else {
-        try std.test.assert_eq(try response(portal), 1);
-        try portal.request(1, false, true);
-        try response(portal);
-        try portal.request(2, false, true);
+        std.test.assert_eq(response(portal), 1);
+        portal.request(1, false, true);
+        response(portal);
+        portal.request(2, false, true);
         if (mode == 3) {
-          match response(portal) {
-            SystemResult.Ok(_) => {
-              try std.test.fail("Missing stream was accepted");
-            },
-            SystemResult.Error(_) => {},
-            SystemResult.Allocation(error) => {
-              return std.test.AssertionResult.Allocation(error);
-            },
-            SystemResult.InvalidArgument(error) => {
-              return std.test.AssertionResult.InvalidArgument(error);
-            },
-            SystemResult.Overflow(error) => {
-              return std.test.AssertionResult.Overflow(error);
+          var operation_completed_4 = false;
+          try {
+            response(portal);
+            operation_completed_4 = true;
+            std.test.fail("Missing stream was accepted");
+          } catch (error: std.Error) {
+            if (operation_completed_4) {
+              throw;
             }
-          };
+          }
         } else {
-          try response(portal);
-          match portal.geometry(2) {
-            SystemResult.Ok(_) => {
-              try std.test.fail("Missing geometry was accepted");
-            },
-            SystemResult.Error(_) => {},
-            SystemResult.Allocation(error) => {
-              return std.test.AssertionResult.Allocation(error);
-            },
-            SystemResult.InvalidArgument(error) => {
-              return std.test.AssertionResult.InvalidArgument(error);
-            },
-            SystemResult.Overflow(error) => {
-              return std.test.AssertionResult.Overflow(error);
+          response(portal);
+
+          var operation_completed_3 = false;
+          try {
+            portal.geometry(2);
+            operation_completed_3 = true;
+            std.test.fail("Missing geometry was accepted");
+          } catch (error: std.Error) {
+            if (operation_completed_3) {
+              throw;
             }
-          };
+          }
         }
       }
     }
-    return std.test.AssertionResult.Ok;
+    return;
   }
 
   /** A Closed signal revokes access to the authorized PipeWire connection. */
-  test_function portal_revocation() std.test.AssertionResult<void> {
+  test_function portal_revocation() {
     var mock = Mock(0);
     var portal = desktop.Portal();
-    try portal.request(0, false, true);
-    try response(portal);
+    portal.request(0, false, true);
+    response(portal);
     unsafe { sg_capture_test_revoke(mock.pointer); };
-    try std.test.assert_eq(try response(portal), 3);
-    match portal.remote() {
-      SystemResult.Ok(_) => {
-        try std.test.fail("Opened a revoked remote");
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
+    std.test.assert_eq(response(portal), 3);
+
+    var operation_completed_2 = false;
+    try {
+      portal.remote();
+      operation_completed_2 = true;
+      std.test.fail("Opened a revoked remote");
+    } catch (error: std.Error) {
+      if (operation_completed_2) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 
   /** Pumps input after injecting an event, allowing X11 to deliver it asynchronously. */
-  function input(
-    selector: ref desktop.Selection,
-    kind: i32,
-    x: i32,
-    y: i32
-  ) std.test.AssertionResult<i32> {
-    try std.test.assert(unsafe { sg_capture_test_input(kind, x, y); } != 0);
+  function input(selector: ref desktop.Selection, kind: i32, x: i32, y: i32) i32 throws {
+    std.test.assert(unsafe { sg_capture_test_input(kind, x, y); } != 0);
     var event: i32 = 0;
     for (var i = 0; i < 20; i += 1) {
-      event = try selector.poll();
+      event = selector.poll();
       if (event != 0) {
-        return std.test.AssertionResult.Ok(event);
+        return event;
       }
       std.time.sleep(std.time.create_duration_millis(2));
     }
-    return std.test.AssertionResult.Ok(event);
+    return event;
   }
 
   /** Repeated forward and reverse drags retain four edges without covering the desktop. */
-  test_function live_selection() std.test.AssertionResult<void> {
+  test_function live_selection() {
     var selection = desktop.Selection();
-    try selection.open(0, 0, 320, 240);
-    try input(selection, 1, 20, 30);
+    selection.open(0, 0, 320, 240);
+    input(selection, 1, 20, 30);
     for (var i = 0; i < 8; i += 1) {
-      try input(selection, 2, 170, 130);
-      try std.test.assert_eq(unsafe { sg_capture_test_outline(20, 30, 150, 100); }, 1);
-      try input(selection, 2, 5, 10);
-      try std.test.assert_eq(unsafe { sg_capture_test_outline(5, 10, 15, 20); }, 1);
+      input(selection, 2, 170, 130);
+      std.test.assert_eq(unsafe { sg_capture_test_outline(20, 30, 150, 100); }, 1);
+      input(selection, 2, 5, 10);
+      std.test.assert_eq(unsafe { sg_capture_test_outline(5, 10, 15, 20); }, 1);
     }
-    try std.test.assert_eq(try input(selection, 3, 170, 130), 1);
-    try std.test.assert_eq(selection.x, 20);
-    try std.test.assert_eq(selection.y, 30);
-    try std.test.assert_eq(selection.width, 150);
-    try std.test.assert_eq(selection.height, 100);
-    return std.test.AssertionResult.Ok;
+    std.test.assert_eq(input(selection, 3, 170, 130), 1);
+    std.test.assert_eq(selection.x, 20);
+    std.test.assert_eq(selection.y, 30);
+    std.test.assert_eq(selection.width, 150);
+    std.test.assert_eq(selection.height, 100);
+    return;
   }
 
   /** Escape releases the grab and missing geometry fails before selection can begin. */
-  test_function selection_cancel_and_invalid_geometry() std.test.AssertionResult<void> {
+  test_function selection_cancel_and_invalid_geometry() {
     var selection = desktop.Selection();
-    try selection.open(0, 0, 320, 240);
-    try std.test.assert_eq(try input(selection, 4, 0, 0), 2);
-    match selection.open(-1, 0, 320, 240) {
-      SystemResult.Ok => {
-        try std.test.fail("Accepted invalid screen geometry");
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
+    selection.open(0, 0, 320, 240);
+    std.test.assert_eq(input(selection, 4, 0, 0), 2);
+
+    var operation_completed_1 = false;
+    try {
+      selection.open(-1, 0, 320, 240);
+      operation_completed_1 = true;
+      std.test.fail("Accepted invalid screen geometry");
+    } catch (error: std.Error) {
+      if (operation_completed_1) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 }
 

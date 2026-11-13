@@ -41,73 +41,73 @@ public module gtk {
     }
 
     /** Rejects operations after a user close or explicit destruction. */
-    method check_open() SystemResult<void> {
+    method check_open() void throws {
       if (this.is_open() == false) {
-        return SystemResult.Error(Error(1, "Window is closed"));
+        throw Error(1, "Window is closed");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Sets a validated title on an open window. */
-    public method set_title(title: ref String) SystemResult<void> {
+    public method set_title(title: ref String) void throws {
       require_thread();
-      try this.check_open();
-      try validate(title);
-      unsafe { raw.gtk_window_set_title(this.pointer, try title.c_str()); };
-      return SystemResult.Ok;
+      this.check_open();
+      validate(title);
+      unsafe { raw.gtk_window_set_title(this.pointer, title.c_str()); };
+      return;
     }
 
     /** Sets positive default dimensions on an open window. */
-    public method set_default_size(width: i32, height: i32) SystemResult<void> {
+    public method set_default_size(width: i32, height: i32) void throws {
       require_thread();
-      try this.check_open();
+      this.check_open();
       if (width <= 0 or height <= 0) {
-        return SystemResult.Error(Error(1, "Window dimensions must be positive"));
+        throw Error(1, "Window dimensions must be positive");
       }
       unsafe { raw.gtk_window_set_default_size(this.pointer, width, height); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Parents an unparented button; both wrappers retain independent ownership. */
-    public method set_child(button: ref Button) SystemResult<void> {
+    public method set_child(button: ref Button) void throws {
       require_thread();
-      try this.check_open();
+      this.check_open();
       var child = unsafe { button.raw_handle(); };
       if (unsafe { gtk_widget_get_parent(child); } != null) {
-        return SystemResult.Error(Error(1, "Button already has a parent"));
+        throw Error(1, "Button already has a parent");
       }
       unsafe { raw.gtk_window_set_child(this.pointer, child); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Parents an unparented box while preserving both wrappers' independent references. */
-    public method set_box(box: ref Box) SystemResult<void> {
+    public method set_box(box: ref Box) void throws {
       require_thread();
-      try this.check_open();
+      this.check_open();
       var child = unsafe { box.raw_handle(); };
       if (unsafe { gtk_widget_get_parent(child); } != null) {
-        return SystemResult.Error(Error(1, "Box already has a parent"));
+        throw Error(1, "Box already has a parent");
       }
       unsafe { raw.gtk_window_set_child(this.pointer, child); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Parents an independently owned heterogeneous widget to an open window. */
-    public method set_widget(widget: ref Widget) SystemResult<void> {
+    public method set_widget(widget: ref Widget) void throws {
       require_thread();
-      try this.check_open();
+      this.check_open();
       if (unsafe { sg_view_window(this.pointer, widget.pointer); } == 0) {
-        return SystemResult.Error(Error(1, "Widget already has a parent"));
+        throw Error(1, "Widget already has a parent");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Presents an open window. */
-    public method present() SystemResult<void> {
+    public method present() void throws {
       require_thread();
-      try this.check_open();
+      this.check_open();
       unsafe { raw.gtk_window_present(this.pointer); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Destroys the window once; repeated closes have no effect. */

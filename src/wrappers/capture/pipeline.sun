@@ -68,23 +68,21 @@ public module desktop {
     }
 
     /** Crops window padding before encoding; requires a named window_crop videocrop element. */
-    public method crop_window() SystemResult<void> {
+    public method crop_window() void throws {
       if (this.started or unsafe { sg_pipeline_crop_window(this.pointer); } == 0) {
-        return SystemResult.Error(Error(1, "Configure window cropping before starting capture"));
+        throw Error(1, "Configure window cropping before starting capture");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Copies the latest native failure. */
-    public method error() AllocationResult<Error> {
+    public method error() Error throws {
       if (this.pointer == null) {
-        return AllocationResult.Ok(Error(1, "Pipeline has not been configured"));
+        return Error(1, "Pipeline has not been configured");
       }
-      return AllocationResult.Ok(
-        try Error(
-          1,
-          try from_c_str(make_heap_allocator(), unsafe { sg_pipeline_error(this.pointer); })
-        )
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_pipeline_error(this.pointer); })
       );
     }
 
@@ -95,21 +93,21 @@ public module desktop {
       remote: i32,
       target: ref String,
       node: ref String
-    ) SystemResult<void> {
-      try validate(description);
-      try validate(target);
-      try validate(node);
+    ) void throws {
+      validate(description);
+      validate(target);
+      validate(node);
       if (this.pointer != null) {
-        return SystemResult.Error(Error(1, "Pipeline already configured"));
+        throw Error(1, "Pipeline already configured");
       }
-      var fd = try output.descriptor();
-      this.pointer = unsafe { sg_pipeline_new(try description.c_str()); };
+      var fd = output.descriptor();
+      this.pointer = unsafe { sg_pipeline_new(description.c_str()); };
       if (unsafe {
-        sg_pipeline_configure(this.pointer, fd, remote, try target.c_str(), try node.c_str());
+        sg_pipeline_configure(this.pointer, fd, remote, target.c_str(), node.c_str());
       } == 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Maps a logical selection to stream pixels before frames reach the encoder. */
@@ -120,60 +118,60 @@ public module desktop {
       height: i32,
       logical_width: i32,
       logical_height: i32
-    ) SystemResult<void> {
+    ) void throws {
       if (this.pointer == null or this.started) {
-        return SystemResult.Error(Error(1, "Configure crop before starting the pipeline"));
+        throw Error(1, "Configure crop before starting the pipeline");
       }
       if (unsafe {
         sg_pipeline_crop(this.pointer, x, y, width, height, logical_width, logical_height);
       } == 0) {
-        return SystemResult.Error(Error(1, "The selected area is outside the shared screen"));
+        throw Error(1, "The selected area is outside the shared screen");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Selects the live inset corner and size before the pipeline starts. */
-    public method presenter(corner: i32, size: i32) SystemResult<void> {
+    public method presenter(corner: i32, size: i32) void throws {
       if (this.pointer == null or this.started or
         unsafe { sg_pipeline_presenter(this.pointer, corner, size); } == 0) {
-        return SystemResult.Error(Error(1, "Invalid live camera layout or pipeline state"));
+        throw Error(1, "Invalid live camera layout or pipeline state");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Starts the configured pipeline once. */
-    public method play() SystemResult<void> {
+    public method play() void throws {
       if (this.pointer == null or this.started) {
-        return SystemResult.Error(Error(1, "Pipeline is not ready to start"));
+        throw Error(1, "Pipeline is not ready to start");
       }
       this.started = true;
       if (unsafe { sg_pipeline_play(this.pointer); } == 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Returns pending, playing, EOS, or source failure; other errors remain failures. */
-    public method poll() SystemResult<i32> {
+    public method poll() i32 throws {
       if (this.pointer == null) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
       var value = unsafe { sg_pipeline_poll(this.pointer); };
       if (value < 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok(value);
+      return value;
     }
 
     /** Sends EOS downstream of a potentially revoked desktop source. */
-    public method finish() SystemResult<void> {
+    public method finish() void throws {
       if (this.pointer == null) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
       if (unsafe { sg_pipeline_finish(this.pointer); } == 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
   }
 }

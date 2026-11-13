@@ -34,63 +34,59 @@ public module desktop {
     }
 
     /** Reserves one file after capture selection and countdown have finished. */
-    public method reserve(directory: ref String) SystemResult<void> {
-      try validate(directory);
+    public method reserve(directory: ref String) void throws {
+      validate(directory);
       if (this.pointer != null) {
-        return SystemResult.Error(Error(1, "Output already reserved"));
+        throw Error(1, "Output already reserved");
       }
-      this.pointer = unsafe { sg_output_new(try directory.c_str()); };
+      this.pointer = unsafe { sg_output_new(directory.c_str()); };
       if (unsafe { sg_output_fd(this.pointer); } < 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Copies a native output failure. */
-    public method error() AllocationResult<Error> {
+    public method error() Error throws {
       if (this.pointer == null) {
-        return AllocationResult.Ok(Error(1, "Output has not been reserved"));
+        return Error(1, "Output has not been reserved");
       }
-      return AllocationResult.Ok(
-        try Error(
-          1,
-          try from_c_str(make_heap_allocator(), unsafe { sg_output_error(this.pointer); })
-        )
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_output_error(this.pointer); })
       );
     }
 
     /** Borrows the descriptor for a pipeline configured before publication. */
-    public method descriptor() SystemResult<i32> {
+    public method descriptor() i32 throws {
       if (this.pointer == null) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
       var fd = unsafe { sg_output_fd(this.pointer); };
       if (fd < 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok(fd);
+      return fd;
     }
 
     /** Keeps partial output for recovery; call after the writing pipeline has stopped. */
-    public method preserve() AllocationResult<String> {
+    public method preserve() String throws {
       if (this.pointer == null) {
-        return AllocationResult.Ok(try String(""));
+        return String("");
       }
-      return AllocationResult.Ok(
-        try from_c_str(make_heap_allocator(), unsafe { sg_output_preserve(this.pointer); })
-      );
+      return from_c_str(make_heap_allocator(), unsafe { sg_output_preserve(this.pointer); });
     }
 
     /** Publishes finalized output; callers must first stop the writing pipeline. */
-    public method publish(destination: ref String) SystemResult<void> {
-      try validate(destination);
+    public method publish(destination: ref String) void throws {
+      validate(destination);
       if (this.pointer == null) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      if (unsafe { sg_output_publish(this.pointer, try destination.c_str()); } == 0) {
-        return SystemResult.Error(try this.error());
+      if (unsafe { sg_output_publish(this.pointer, destination.c_str()); } == 0) {
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
   }
 }

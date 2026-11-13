@@ -9,13 +9,13 @@ public module gtk {
     var kind: i32;
 
     /** Creates a supported widget on the GTK main thread. */
-    init(kind: i32) SystemResult<void> {
+    init(kind: i32) throws {
       require_thread();
       if (kind < 0 or (kind > 10 and kind != 12)) {
-        return SystemResult.Error(Error(1, "Unknown widget kind"));
+        throw Error(1, "Unknown widget kind");
       }
       if (unsafe { gtk_init_check(); } == 0) {
-        return SystemResult.Error(Error(1, "Cannot initialize GTK"));
+        throw Error(1, "Cannot initialize GTK");
       }
       this.kind = kind;
       this.pointer = unsafe { sg_view_new(kind); };
@@ -46,37 +46,37 @@ public module gtk {
     }
 
     /** Applies hover help and an optional themed icon without exposing native handles. */
-    public method hint(tooltip: ref String, icon: ref String) SystemResult<void> {
+    public method hint(tooltip: ref String, icon: ref String) void throws {
       require_thread();
-      try validate(tooltip);
-      try validate(icon);
+      validate(tooltip);
+      validate(icon);
       if (not icon.is_empty() and this.kind != 6) {
-        return SystemResult.Error(Error(1, "Only buttons support icons"));
+        throw Error(1, "Only buttons support icons");
       }
-      unsafe { sg_view_hint(this.pointer, try tooltip.c_str(), try icon.c_str()); };
-      return SystemResult.Ok;
+      unsafe { sg_view_hint(this.pointer, tooltip.c_str(), icon.c_str()); };
+      return;
     }
 
     /** Installs validated, chronological kept ranges without emitting editing events. */
-    public method media_ranges(encoded: ref String, active: i64) SystemResult<void> {
+    public method media_ranges(encoded: ref String, active: i64) void throws {
       require_thread();
-      try validate(encoded);
+      validate(encoded);
       if (this.kind != 10 or
-        unsafe { sg_media_ranges(this.pointer, try encoded.c_str(), active); } == 0) {
-        return SystemResult.Error(Error(1, "Invalid kept video sections"));
+        unsafe { sg_media_ranges(this.pointer, encoded.c_str(), active); } == 0) {
+        throw Error(1, "Invalid kept video sections");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Loads a local image into an image widget; decoding errors stay in its preview. */
-    public method image(path: ref String) SystemResult<void> {
+    public method image(path: ref String) void throws {
       require_thread();
-      try validate(path);
+      validate(path);
       if (this.kind != 12) {
-        return SystemResult.Error(Error(1, "Widget is not an image"));
+        throw Error(1, "Widget is not an image");
       }
-      unsafe { sg_image_set(this.pointer, try path.c_str()); };
-      return SystemResult.Ok;
+      unsafe { sg_image_set(this.pointer, path.c_str()); };
+      return;
     }
 
     /** Reports empty, decoded, or failed image state without exposing native handles. */
@@ -94,13 +94,13 @@ public module gtk {
     }
 
     /** Sets frames per second as a rational; zero numerator preserves time-based scrubbing. */
-    public method media_frame_rate(numerator: i64, denominator: i64) SystemResult<void> {
+    public method media_frame_rate(numerator: i64, denominator: i64) void throws {
       require_thread();
       if (this.kind != 10 or
         unsafe { sg_media_frame_rate(this.pointer, numerator, denominator); } == 0) {
-        return SystemResult.Error(Error(1, "Invalid video frame rate"));
+        throw Error(1, "Invalid video frame rate");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Applies a media source and trim range in microseconds, rejecting invalid bounds. */
@@ -110,37 +110,37 @@ public module gtk {
       start: i64,
       end: i64,
       position: i64
-    ) SystemResult<void> {
+    ) void throws {
       require_thread();
-      try validate(path);
+      validate(path);
       if (this.kind != 10 or duration < 0 or duration > 1000000000000000 or start < 0 or
         end < start or end > duration or position < 0 or position > duration or
         (duration > 0 and start == end)) {
-        return SystemResult.Error(Error(1, "Invalid media range"));
+        throw Error(1, "Invalid media range");
       }
-      unsafe { sg_media_set(this.pointer, try path.c_str(), duration, start, end, position); };
-      return SystemResult.Ok;
+      unsafe { sg_media_set(this.pointer, path.c_str(), duration, start, end, position); };
+      return;
     }
 
     /** Drives a real native drag for automated interaction, rejecting nonfinite coordinates. */
-    public method drag_media(start: f64, end: f64) SystemResult<void> {
+    public method drag_media(start: f64, end: f64) void throws {
       require_thread();
       if (this.kind != 10 or start != start or end != end or start < 0.0 or start > 1.0 or
         end < 0.0 or end > 1.0) {
-        return SystemResult.Error(Error(1, "Invalid media drag"));
+        throw Error(1, "Invalid media drag");
       }
       unsafe { sg_media_drag(this.pointer, start, end); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Drives one real arrow-key edit, rejecting directions other than previous or next. */
-    public method step_media(direction: i32) SystemResult<void> {
+    public method step_media(direction: i32) void throws {
       require_thread();
       if (this.kind != 10 or (direction != -1 and direction != 1)) {
-        return SystemResult.Error(Error(1, "Invalid media step direction"));
+        throw Error(1, "Invalid media step direction");
       }
       unsafe { sg_media_step(this.pointer, direction); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Reports error (-1), preparing (0), paused (1), playing (2), or seeking (3). */
@@ -164,46 +164,46 @@ public module gtk {
     }
 
     /** Copies validated text without generating edit events or resetting unchanged entry text. */
-    public method set_text(text: ref String) SystemResult<void> {
+    public method set_text(text: ref String) void throws {
       require_thread();
-      try validate(text);
+      validate(text);
       if (this.kind < 5 or this.kind > 8) {
-        return SystemResult.Error(Error(1, "Widget has no text property"));
+        throw Error(1, "Widget has no text property");
       }
-      unsafe { sg_view_text(this.pointer, try text.c_str()); };
-      return SystemResult.Ok;
+      unsafe { sg_view_text(this.pointer, text.c_str()); };
+      return;
     }
 
     /** Sets checkbox or dropdown state without emitting application edits. */
-    public method set_value(value: i32) SystemResult<void> {
+    public method set_value(value: i32) void throws {
       require_thread();
       if ((this.kind != 8 and this.kind != 9) or value < -1) {
-        return SystemResult.Error(Error(1, "Invalid widget value"));
+        throw Error(1, "Invalid widget value");
       }
       unsafe { sg_view_value(this.pointer, value); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Clears dropdown choices while suppressing selection notifications. */
-    public method clear_options() SystemResult<void> {
+    public method clear_options() void throws {
       require_thread();
       if (this.kind != 9) {
-        return SystemResult.Error(Error(1, "Widget is not a select"));
+        throw Error(1, "Widget is not a select");
       }
       unsafe { sg_view_options(this.pointer, null, null, 1); };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Copies one validated label into a dropdown model. */
-    public method add_option(text: ref String, key: ref String) SystemResult<void> {
+    public method add_option(text: ref String, key: ref String) void throws {
       require_thread();
-      try validate(text);
-      try validate(key);
+      validate(text);
+      validate(key);
       if (this.kind != 9) {
-        return SystemResult.Error(Error(1, "Widget is not a select"));
+        throw Error(1, "Widget is not a select");
       }
-      unsafe { sg_view_options(this.pointer, try text.c_str(), try key.c_str(), 0); };
-      return SystemResult.Ok;
+      unsafe { sg_view_options(this.pointer, text.c_str(), key.c_str(), 0); };
+      return;
     }
 
     /** Applies common properties after rejecting invalid dimensions and alignments. */
@@ -218,11 +218,11 @@ public module gtk {
       expand_x: bool,
       expand_y: bool,
       spacing: i32
-    ) SystemResult<void> {
+    ) void throws {
       require_thread();
       if (margin < 0 or width < -1 or height < -1 or horizontal < 0 or horizontal > 3 or
         vertical < 0 or vertical > 3 or spacing < 0) {
-        return SystemResult.Error(Error(1, "Invalid widget layout"));
+        throw Error(1, "Invalid widget layout");
       }
       unsafe {
         sg_view_properties(
@@ -239,7 +239,7 @@ public module gtk {
           spacing
         );
       };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Places a child first after validating parenting and grid coordinates. */
@@ -249,14 +249,14 @@ public module gtk {
       column: i32,
       row_span: i32,
       column_span: i32
-    ) SystemResult<void> {
+    ) void throws {
       require_thread();
       if (unsafe {
         sg_view_place(this.pointer, child.pointer, null, row, column, row_span, column_span);
       } == 0) {
-        return SystemResult.Error(Error(1, "Invalid widget parenting"));
+        throw Error(1, "Invalid widget parenting");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Reorders or inserts a child after a sibling, preserving existing native focus. */
@@ -267,7 +267,7 @@ public module gtk {
       column: i32,
       row_span: i32,
       column_span: i32
-    ) SystemResult<void> {
+    ) void throws {
       require_thread();
       if (unsafe {
         sg_view_place(
@@ -280,9 +280,9 @@ public module gtk {
           column_span
         );
       } == 0) {
-        return SystemResult.Error(Error(1, "Invalid widget parenting"));
+        throw Error(1, "Invalid widget parenting");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Detaches this widget while retaining its independent reference. */
@@ -292,34 +292,34 @@ public module gtk {
     }
 
     /** Applies validated CSS through a widget-local provider owned by GTK. */
-    public method style(css: ref String) SystemResult<void> {
+    public method style(css: ref String) void throws {
       require_thread();
-      try validate(css);
-      if (unsafe { sg_view_style(this.pointer, try css.c_str()); } == 0) {
-        return SystemResult.Error(Error(1, "Invalid widget style"));
+      validate(css);
+      if (unsafe { sg_view_style(this.pointer, css.c_str()); } == 0) {
+        throw Error(1, "Invalid widget style");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Clears or appends a checked grid track without replacing its children. */
-    public method track(horizontal: bool, kind: i32, value: i32, clear: bool) SystemResult<void> {
+    public method track(horizontal: bool, kind: i32, value: i32, clear: bool) void throws {
       require_thread();
       if (unsafe { sg_view_track(this.pointer, horizontal ? 1 : 0, kind, value, clear ? 1 : 0); } ==
         0) {
-        return SystemResult.Error(Error(1, "Invalid grid track"));
+        throw Error(1, "Invalid grid track");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Simulates a user edit through native GTK setters for acceptance tests. */
-    public method edit(text: ref String, value: i32) SystemResult<void> {
+    public method edit(text: ref String, value: i32) void throws {
       require_thread();
-      try validate(text);
+      validate(text);
       if (this.kind < 7 or this.kind > 9 or value < -1) {
-        return SystemResult.Error(Error(1, "Widget is not editable"));
+        throw Error(1, "Widget is not editable");
       }
-      unsafe { sg_view_edit(this.pointer, try text.c_str(), value); };
-      return SystemResult.Ok;
+      unsafe { sg_view_edit(this.pointer, text.c_str(), value); };
+      return;
     }
 
     /** Reports the currently allocated width or height. */

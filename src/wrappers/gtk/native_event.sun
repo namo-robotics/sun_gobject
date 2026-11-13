@@ -11,8 +11,8 @@ public module gtk {
     public var value: i32 = 0;
 
     /** Takes an opaque identity and its native event category. */
-    init(id: RegistrationId, kind: EventKind) AllocationResult<void> {
-      this.text = try String("");
+    init(id: RegistrationId, kind: EventKind) throws {
+      this.text = String("");
 
       this.id = id;
       this.event_kind = kind;

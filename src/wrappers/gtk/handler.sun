@@ -10,7 +10,7 @@ public module gtk {
     var delay: u32;
     var emitter: raw_ptr<u8>;
     var source: raw_ptr<u8> = null;
-    var callback: function (ref State, ref EventContext<State>) SystemResult<void>;
+    var callback: function (ref State, ref EventContext<State>) void throws;
 
     /** Retains an emitter until this handler is installed or discarded. */
     init(
@@ -18,7 +18,7 @@ public module gtk {
       kind: u32,
       delay: u32,
       emitter: raw_ptr<u8>,
-      callback: function (ref State, ref EventContext<State>) SystemResult<void>
+      callback: function (ref State, ref EventContext<State>) void throws
     ) {
       this.number = number;
       this.kind = kind;
@@ -42,7 +42,7 @@ public module gtk {
     }
 
     /** Installs the staged registration after the current callback has returned. */
-    method install(core: ref LoopCore) SystemResult<void> {
+    method install(core: ref LoopCore) void throws {
       if (this.kind < 3) {
         this.source = unsafe {
           sg_loop_connect(core.pointer, this.number, this.kind, this.emitter);
@@ -51,13 +51,13 @@ public module gtk {
         this.source = unsafe { sg_loop_timer(core.pointer, this.number, this.delay); };
       }
       if (this.source == null) {
-        return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
+        throw Error(1, "Window is closed or belongs to another application");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Invokes user code without lending it the registry or any registry entry. */
-    method call(state: ref State, context: ref EventContext<State>) SystemResult<void> {
+    method call(state: ref State, context: ref EventContext<State>) void throws {
       return this.callback(state, context);
     }
   }

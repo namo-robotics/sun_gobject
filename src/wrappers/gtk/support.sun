@@ -52,11 +52,11 @@ public module gtk {
   }
 
   /** Validates text before it crosses the C string boundary. */
-  function validate(text: ref String) SystemResult<void> {
-    if (unsafe { sg_ui_valid_text(try text.c_str(), _convert<u64>(text.length())); } == 0) {
-      return SystemResult.Error(Error(1, "GTK text must be UTF-8 without embedded NUL bytes"));
+  function validate(text: ref String) void throws {
+    if (unsafe { sg_ui_valid_text(text.c_str(), _convert<u64>(text.length())); } == 0) {
+      throw Error(1, "GTK text must be UTF-8 without embedded NUL bytes");
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Selects the native axis used by a GTK box. */

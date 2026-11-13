@@ -18,12 +18,17 @@ public module gir {
   extern "C" function g_free(p: raw_ptr<u8>) void;
 
   /** Hashes input bytes and returns the owned hexadecimal digest. */
-  public function sha256(value: ref String) AllocationResult<String> {
+  public function sha256(value: ref String) String throws {
     var a = make_heap_allocator();
-    var p = unsafe { g_compute_checksum_for_string(2, try value.c_str(), value.length()); };
-    var result = from_c_str(a, p);
-    unsafe { g_free(p); };
-    return AllocationResult.Ok(try result);
+    var p = unsafe { g_compute_checksum_for_string(2, value.c_str(), value.length()); };
+    try {
+      var result = from_c_str(a, p);
+      unsafe { g_free(p); };
+      return result;
+    } catch {
+      unsafe { g_free(p); };
+      throw;
+    }
   }
 
   /** Owns the dependency closure and provenance of loaded GIR namespaces. */
@@ -34,81 +39,81 @@ public module gir {
     public var docs: Vec<xml.Document>;
 
     /** Initializes Repository with the supplied owned values or native pointer contract. */
-    init() AllocationResult<void> {
+    init() throws {
       var a = make_heap_allocator();
-      this.dirs = try Vec<String>(a, 4);
-      this.keys = try Vec<String>(a, 16);
-      this.hashes = try Vec<String>(a, 16);
-      this.docs = try Vec<xml.Document>(a, 16);
+      this.dirs = Vec<String>(a, 4);
+      this.keys = Vec<String>(a, 16);
+      this.hashes = Vec<String>(a, 16);
+      this.docs = Vec<xml.Document>(a, 16);
     }
 
     /** Loads a namespace once and recursively resolves its versioned dependencies. */
-    public method load(name: const ref String, version: const ref String) AllocationResult<void> {
+    public method load(name: const ref String, version: const ref String) void throws {
       var a = make_heap_allocator();
-      var key = try name.clone(a);
-      try key.append("-");
-      try key.append(version);
+      var key = name.clone(a);
+      key.append("-");
+      key.append(version);
       for (var k: i64 = 0; k < this.keys.size(); k += 1) {
         if (this.keys[k].equals(key)) {
-          return AllocationResult.Ok;
+          return;
         }
       }
-      var prefix = try name.clone(a);
-      try prefix.append("-");
+      var prefix = name.clone(a);
+      prefix.append("-");
       for (var k: i64 = 0; k < this.keys.size(); k += 1) {
         if (this.keys[k].starts_with(prefix)) {
           die("conflicting GIR dependency versions");
         }
       }
-      var file = try key.clone(a);
-      try file.append(".gir");
-      var path = try String("");
+      var file = key.clone(a);
+      file.append(".gir");
+      var path = String("");
       for (var d: i64 = 0; d < this.dirs.size(); d += 1) {
-        var candidate = try this.dirs[d].clone(a);
-        try candidate.append("/");
-        try candidate.append(file);
-        if (unsafe { access(try candidate.c_str(), 4); } == 0) {
+        var candidate = this.dirs[d].clone(a);
+        candidate.append("/");
+        candidate.append(file);
+        if (unsafe { access(candidate.c_str(), 4); } == 0) {
           path = candidate;
           break;
         }
       }
       if (path.length() == 0) {
-        var error = try String("missing GIR dependency: ");
-        try error.append(file);
+        var error = String("missing GIR dependency: ");
+        error.append(file);
         fail(error);
       }
-      var content = try read(path);
-      var hash = try sha256(content);
-      var doc = try xml.Document(content, path);
-      try doc.parse();
+      var content = read(path);
+      var hash = sha256(content);
+      var doc = xml.Document(content, path);
+      doc.parse();
       var found = false;
-      var dependencies = try Vec<String>(a, 8);
-      var versions = try Vec<String>(a, 8);
+      var dependencies = Vec<String>(a, 8);
+      var versions = Vec<String>(a, 8);
       for (var i: i64 = 0; i < doc.nodes.size(); i += 1) {
         if (doc.nodes[i].name.equals_literal("namespace")) {
-          var actual = try doc.nodes[i].attr("name");
-          var v = try doc.nodes[i].attr("version");
+          var actual = doc.nodes[i].attr("name");
+          var v = doc.nodes[i].attr("version");
           if (actual.equals(name) == false or v.equals(version) == false) {
             die("GIR namespace/version mismatch");
           }
           found = true;
         }
         if (doc.nodes[i].name.equals_literal("include")) {
-          try dependencies.push(try doc.nodes[i].attr("name"));
-          try versions.push(try doc.nodes[i].attr("version"));
+          dependencies.push(doc.nodes[i].attr("name"));
+          versions.push(doc.nodes[i].attr("version"));
         }
       }
       if (found == false) {
         die("GIR namespace missing");
       }
-      try this.keys.push(key);
-      try this.hashes.push(hash);
-      try this.docs.push(doc);
+      this.keys.push(key);
+      this.hashes.push(hash);
+      this.docs.push(doc);
       for (var i: i64 = 0; i < dependencies.size(); i += 1) {
         this.load(dependencies[i], versions[i]);
       }
 
-      return AllocationResult.Ok;
+      return;
     }
   }
 
@@ -130,7 +135,7 @@ public module gir {
     repo: const ref Repository,
     doc: const ref xml.Document,
     node: i64
-  ) AllocationResult<String> {
+  ) String throws {
     var type_node = child(doc, node, "type");
     if (type_node < 0) {
       type_node = child(doc, node, "array");
@@ -138,73 +143,73 @@ public module gir {
     if (type_node < 0) {
       die("selected signature has no scalar/pointer type (arrays and varargs need an override)");
     }
-    var ctype = try doc.nodes[type_node].attr("c:type");
-    var name = try doc.nodes[type_node].attr("name");
+    var ctype = doc.nodes[type_node].attr("c:type");
+    var name = doc.nodes[type_node].attr("name");
     if (ctype.contains("*") or ctype.equals_literal("gpointer") or
       ctype.equals_literal("gconstpointer")) {
-      return AllocationResult.Ok(try String("raw_ptr<u8>"));
+      return String("raw_ptr<u8>");
     }
     if (name.equals_literal("none") or ctype.equals_literal("void")) {
-      return AllocationResult.Ok(try String("void"));
+      return String("void");
     }
     if (name.equals_literal("gboolean") or name.equals_literal("gint") or
       name.equals_literal("gint32")) {
-      return AllocationResult.Ok(try String("i32"));
+      return String("i32");
     }
     if (name.equals_literal("guint") or name.equals_literal("guint32") or
       name.equals_literal("gunichar")) {
-      return AllocationResult.Ok(try String("u32"));
+      return String("u32");
     }
     if (name.equals_literal("gint64") or name.equals_literal("glong") or
       name.equals_literal("gssize")) {
-      return AllocationResult.Ok(try String("i64"));
+      return String("i64");
     }
     if (name.equals_literal("guint64") or name.equals_literal("gulong") or
       name.equals_literal("gsize") or name.equals_literal("GType")) {
-      return AllocationResult.Ok(try String("u64"));
+      return String("u64");
     }
     if (name.equals_literal("gfloat")) {
-      return AllocationResult.Ok(try String("f32"));
+      return String("f32");
     }
     if (name.equals_literal("gdouble")) {
-      return AllocationResult.Ok(try String("f64"));
+      return String("f64");
     }
     if (name.equals_literal("gint8")) {
-      return AllocationResult.Ok(try String("i8"));
+      return String("i8");
     }
     if (name.equals_literal("guint8")) {
-      return AllocationResult.Ok(try String("u8"));
+      return String("u8");
     }
     if (name.equals_literal("gint16")) {
-      return AllocationResult.Ok(try String("i16"));
+      return String("i16");
     }
     if (name.equals_literal("guint16")) {
-      return AllocationResult.Ok(try String("u16"));
+      return String("u16");
     }
     if (name.equals_literal("gpointer") or name.equals_literal("gconstpointer") or
       name.equals_literal("utf8") or name.equals_literal("filename")) {
-      return AllocationResult.Ok(try String("raw_ptr<u8>"));
+      return String("raw_ptr<u8>");
     }
     // Enums are only accepted when a declaration establishes their ABI category.
     for (var d: i64 = 0; d < repo.docs.size(); d += 1) {
       for (var i: i64 = 0; i < repo.docs[d].nodes.size(); i += 1) {
-        var c = try repo.docs[d].nodes[i].attr("c:type");
+        var c = repo.docs[d].nodes[i].attr("c:type");
         if (c.length() > 0 and c.equals(ctype)) {
           if (repo.docs[d].nodes[i].name.equals_literal("enumeration")) {
-            return AllocationResult.Ok(try String("i32"));
+            return String("i32");
           }
           if (repo.docs[d].nodes[i].name.equals_literal("bitfield")) {
-            return AllocationResult.Ok(try String("u32"));
+            return String("u32");
           }
         }
       }
     }
-    var error = try String("unsupported selected type: ");
-    try error.append(name);
-    try error.append(" / ");
-    try error.append(ctype);
+    var error = String("unsupported selected type: ");
+    error.append(name);
+    error.append(" / ");
+    error.append(ctype);
     fail(error);
-    return AllocationResult.Ok(try String(""));
+    return String("");
   }
 
   /** Emits original GIR attributes as a single escaped documentation line. */
@@ -212,19 +217,19 @@ public module gir {
     doc: const ref xml.Document,
     node: i64,
     label: const ref String
-  ) AllocationResult<String> {
-    var result = try String("  // ");
-    try result.append(label);
+  ) String throws {
+    var result = String("  // ");
+    result.append(label);
     for (var i: i64 = 0; i < doc.nodes[node].attributes.size(); i += 1) {
-      var key = try quote(doc.nodes[node].attributes[i].name);
-      var value = try quote(doc.nodes[node].attributes[i].value);
-      try result.append(" ");
-      try result.append(key);
-      try result.append("=");
-      try result.append(value);
+      var key = quote(doc.nodes[node].attributes[i].name);
+      var value = quote(doc.nodes[node].attributes[i].value);
+      result.append(" ");
+      result.append(key);
+      result.append("=");
+      result.append(value);
     }
-    try result.append("\n");
-    return AllocationResult.Ok(result);
+    result.append("\n");
+    return result;
   }
 
   /** Emits a selected extern declaration, rejecting unsupported ABI shapes. */
@@ -232,16 +237,16 @@ public module gir {
     repo: const ref Repository,
     doc: const ref xml.Document,
     node: i64
-  ) AllocationResult<String> {
-    var symbol = try doc.nodes[node].attr("c:identifier");
-    var fallible = try doc.nodes[node].attr("throws");
+  ) String throws {
+    var symbol = doc.nodes[node].attr("c:identifier");
+    var fallible = doc.nodes[node].attr("throws");
     if (fallible.equals_literal("1")) {
       die("selected throwing signature needs explicit GError** support");
     }
-    var result = try String("  public extern \"C\" function ");
-    try result.append(symbol);
-    try result.append("(");
-    var documentation = try String(
+    var result = String("  public extern \"C\" function ");
+    result.append(symbol);
+    result.append("(");
+    var documentation = String(
       "  // Native ABI; ownership and nullability below are caller contracts.\n"
     );
 
@@ -257,58 +262,58 @@ public module gir {
             doc.nodes[i].name.equals_literal("instance-parameter") == false) {
             die("unsupported parameter construct");
           }
-          var label = try String("arg");
-          try label.append(count);
-          var notes = try annotations(doc, i, label);
-          try documentation.append(notes);
+          var label = String("arg");
+          label.append(count);
+          var notes = annotations(doc, i, label);
+          documentation.append(notes);
           if (count > 0) {
-            try result.append(", ");
+            result.append(", ");
           }
-          try result.append("arg");
-          try result.append(count);
-          try result.append(": ");
-          var type = try type_name(repo, doc, i);
-          try result.append(type);
+          result.append("arg");
+          result.append(count);
+          result.append(": ");
+          var type = type_name(repo, doc, i);
+          result.append(type);
           count += 1;
         }
       }
     }
-    try result.append(") ");
+    result.append(") ");
     var ret = child(doc, node, "return-value");
     if (ret < 0) {
       die("return-value missing");
     }
-    var label = try String("return");
-    var notes = try annotations(doc, ret, label);
-    try documentation.append(notes);
-    var ret_type = try type_name(repo, doc, ret);
-    try result.append(ret_type);
-    try result.append(";\n");
-    try documentation.append(result);
-    return AllocationResult.Ok(documentation);
+    var label = String("return");
+    var notes = annotations(doc, ret, label);
+    documentation.append(notes);
+    var ret_type = type_name(repo, doc, ret);
+    result.append(ret_type);
+    result.append(";\n");
+    documentation.append(result);
+    return documentation;
   }
 
   /** Escapes text for JSON and generated Sun string literals. */
-  public function quote(s: const ref String) AllocationResult<String> {
-    var result = try String("\"");
+  public function quote(s: const ref String) String throws {
+    var result = String("\"");
     for (var i: i64 = 0; i < s.length(); i += 1) {
       var c = byte(s, i);
       if (c == 34 or c == 92) {
-        try result.append_char(92);
-        try result.append_char(c);
+        result.append_char(92);
+        result.append_char(c);
       } else if (c == 10) {
-        try result.append("\\n");
+        result.append("\\n");
       } else if (c == 13) {
-        try result.append("\\r");
+        result.append("\\r");
       } else if (c == 9) {
-        try result.append("\\t");
+        result.append("\\t");
       } else if (c < 32) {
         die("control character in metadata");
       } else {
-        try result.append_char(c);
+        result.append_char(c);
       }
     }
-    try result.append("\"");
-    return AllocationResult.Ok(result);
+    result.append("\"");
+    return result;
   }
 }

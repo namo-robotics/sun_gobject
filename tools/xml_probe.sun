@@ -1,16 +1,16 @@
 using std;
 
 /** Verifies that the selected compiler provides the standard-library XML reader. */
-function main() AllocationResult<i32> {
+function main() i32 throws {
   var a = make_heap_allocator();
-  var input = try String("<probe/>");
-  var reader = try std.xml.XmlReader(a, input);
-  return AllocationResult.Ok(
-    match reader.next() {
-      Result.Ok(_) => 0,
-      _ => 1
-    }
-  );
+  var input = String("<probe/>");
+  var reader = std.xml.XmlReader(a, input);
+  try {
+    reader.next();
+    return 0;
+  } catch {
+    return 1;
+  }
 }
 manifest {
   source_files: [

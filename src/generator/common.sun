@@ -20,44 +20,43 @@ public module sg {
 
   /** Reads one byte, returning zero outside the string bounds. */
   public function byte(s: const ref String, i: i64) u8 {
-    return match s.at(i) {
-      AccessResult.Ok(v) => v,
-      AccessResult.OutOfBounds(e) => 0
-    };
+    try {
+      var v = s.at(i);
+      return v;
+    } catch (e: std.IndexOutOfBoundsError) {
+      return 0;
+    }
   }
 
   /** Copies a validated byte range into a new owned string. */
-  public function slice(s: const ref String, start: i64, length: i64) std.Result<String> {
+  public function slice(s: const ref String, start: i64, length: i64) String throws {
     var alloc = make_heap_allocator();
-    return std.Result.Ok(
-      match try sun_gobject_results.access(s.substr(alloc, start, length)) {
-        AccessResult.Ok(v) => v,
-        AccessResult.OutOfBounds(e) => try String(alloc, "")
-      }
-    );
+    try {
+      var v = s.substr(alloc, start, length);
+      return v;
+    } catch (e: std.IndexOutOfBoundsError) {
+      return String(alloc, "");
+    }
   }
 
   /** Reads a complete file or terminates with the failing path. */
-  public function read(path: ref String) AllocationResult<String> {
+  public function read(path: ref String) String throws {
     var alloc = make_heap_allocator();
-    return AllocationResult.Ok(
-      match std.io.read_to_string(alloc, path) {
-        SystemResult.Ok(v) => v,
-        (error: const ref IError) => {
-          fail(path);
-          return AllocationResult.Ok(try String(alloc, ""));
-        }
-      }
-    );
+    try {
+      var v = std.io.read_to_string(alloc, path);
+      return v;
+    } catch {
+      fail(path);
+      return String(alloc, "");
+    }
   }
 
   /** Writes generated content or terminates with the failing path. */
   public function write(path: ref String, value: ref String) void {
-    match std.io.write_string(path, value) {
-      SystemResult.Ok => {},
-      (error: const ref IError) => {
-        fail(path);
-      }
-    };
+    try {
+      std.io.write_string(path, value);
+    } catch {
+      fail(path);
+    }
   }
 }

@@ -8,10 +8,10 @@ public module gtk {
     var pointer: raw_ptr<u8> = null;
 
     /** Creates an initially empty surface. */
-    init() SystemResult<void> {
+    init() throws {
       require_thread();
       if (unsafe { gtk_init_check(); } == 0) {
-        return SystemResult.Error(Error(1, "Cannot initialize the GTK display"));
+        throw Error(1, "Cannot initialize the GTK display");
       }
       this.pointer = unsafe { gtk_drawing_area_new(); };
       unsafe { gobject.raw.g_object_ref_sink(this.pointer); };

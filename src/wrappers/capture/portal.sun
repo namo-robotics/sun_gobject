@@ -42,57 +42,51 @@ public module desktop {
     }
 
     /** Copies the latest native failure. */
-    public method error() AllocationResult<Error> {
-      return AllocationResult.Ok(
-        try Error(
-          1,
-          try from_c_str(make_heap_allocator(), unsafe { sg_portal_error(this.pointer); })
-        )
+    public method error() Error throws {
+      return Error(
+        1,
+        from_c_str(make_heap_allocator(), unsafe { sg_portal_error(this.pointer); })
       );
     }
 
     /** Sends CreateSession, SelectSources, or Start in the caller's chosen sequence. */
-    public method request(step: i32, window: bool, cursor: bool) SystemResult<void> {
+    public method request(step: i32, window: bool, cursor: bool) void throws {
       if (unsafe { sg_portal_request(this.pointer, step, window ? 2 : 1, cursor ? 2 : 1); } == 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Returns pending, success, cancelled, or closed; native failures return an error. */
-    public method poll() SystemResult<i32> {
+    public method poll() i32 throws {
       var result = unsafe { sg_portal_poll(this.pointer); };
       if (result < 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok(result);
+      return result;
     }
 
     /** Reads x, y, width, or height; missing portal geometry is reported as an error. */
-    public method geometry(field: i32) SystemResult<i32> {
+    public method geometry(field: i32) i32 throws {
       var value = unsafe { sg_portal_geometry(this.pointer, field); };
       if (field < 0 or field > 3 or value < 0) {
-        return SystemResult.Error(
-          Error(1, "This desktop does not provide usable screen geometry for live selection")
-        );
+        throw Error(1, "This desktop does not provide usable screen geometry for live selection");
       }
-      return SystemResult.Ok(value);
+      return value;
     }
 
     /** Borrows the authorized descriptor until this session is destroyed. */
-    public method remote() SystemResult<i32> {
+    public method remote() i32 throws {
       var fd = unsafe { sg_portal_remote(this.pointer); };
       if (fd < 0) {
-        return SystemResult.Error(try this.error());
+        throw this.error();
       }
-      return SystemResult.Ok(fd);
+      return fd;
     }
 
     /** Copies the preferred serial or fallback node identifier. */
-    public method target(serial: bool) std.AllocationResult<String> {
-      return std.AllocationResult.Ok(
-        try take_text(unsafe { sg_portal_target(this.pointer, serial ? 1 : 0); })
-      );
+    public method target(serial: bool) String throws {
+      return take_text(unsafe { sg_portal_target(this.pointer, serial ? 1 : 0); });
     }
   }
 }

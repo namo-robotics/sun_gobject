@@ -4,79 +4,65 @@ using std;
 module demo {
 
   /** Exercises a real button event and rejects invalid widget operations. */
-  function check_widgets(window: ref gtk.Window, button: ref gtk.Button) SystemResult<void> {
-    var original = try button.label();
+  function check_widgets(window: ref gtk.Window, button: ref gtk.Button) void throws {
+    var original = button.label();
     if (original.equals_literal("Click me") == false) {
-      return SystemResult.Error(Error(1, "Initial button label differs"));
+      throw Error(1, "Initial button label differs");
     }
-    var invalid = try String("bad");
-    try invalid.append_char(0);
-    try invalid.append("label");
-    match button.set_label(invalid) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    var invalid = String("bad");
+    invalid.append_char(0);
+    invalid.append("label");
+
+    var operation_completed_5 = false;
+    try {
+      button.set_label(invalid);
+      operation_completed_5 = true;
+      throw Error(1, "Embedded NUL was accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_5) {
+        throw;
       }
-    };
-    var malformed = try String("");
-    try malformed.append_char(192);
-    try malformed.append_char(128);
-    match button.set_label(malformed) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Invalid UTF-8 was accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    }
+
+    var malformed = String("");
+    malformed.append_char(192);
+    malformed.append_char(128);
+
+    var operation_completed_4 = false;
+    try {
+      button.set_label(malformed);
+      operation_completed_4 = true;
+      throw Error(1, "Invalid UTF-8 was accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_4) {
+        throw;
       }
-    };
-    match window.set_child(button) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Parented button was accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    }
+
+    var operation_completed_3 = false;
+    try {
+      window.set_child(button);
+      operation_completed_3 = true;
+      throw Error(1, "Parented button was accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_3) {
+        throw;
       }
-    };
-    match window.set_default_size(0, 240) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Invalid size was accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    }
+
+    var operation_completed_2 = false;
+    try {
+      window.set_default_size(0, 240);
+      operation_completed_2 = true;
+      throw Error(1, "Invalid size was accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_2) {
+        throw;
       }
-    };
+    }
+
     button.click();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Owns widgets and callback state borrowed only while the event loop runs. */
@@ -88,109 +74,110 @@ module demo {
     var closed: bool = false;
 
     /** Builds the window and button before transferring the application to the loop. */
-    init(app: ref gtk.Application, automated: bool) SystemResult<void> {
+    init(app: ref gtk.Application, automated: bool) throws {
       this.window = gtk.Window(app);
-      var label = try String("Click me");
-      this.button = try gtk.Button(label);
+      var label = String("Click me");
+      this.button = gtk.Button(label);
       this.automated = automated;
-      var title = try String("Sun GObject");
-      try this.window.set_title(title);
-      try this.window.set_default_size(420, 240);
-      try this.window.set_child(this.button);
-      try this.window.present();
+      var title = String("Sun GObject");
+      this.window.set_title(title);
+      this.window.set_default_size(420, 240);
+      this.window.set_child(this.button);
+      this.window.present();
     }
   }
 
   /** Changes the label from a Sun callback after native dispatch has returned. */
-  function clicked(
-    state: ref AppState,
-    context: ref gtk.EventContext<AppState>
-  ) SystemResult<void> {
-    var greeting = try String("Hello from Sun!");
-    try state.button.set_label(greeting);
+  function clicked(state: ref AppState, context: ref gtk.EventContext<AppState>) void throws {
+    var greeting = String("Hello from Sun!");
+    state.button.set_label(greeting);
     state.clicked = true;
     if (state.automated) {
-      var copied = try state.button.label();
+      var copied = state.button.label();
       if (copied.equals(greeting) == false or state.button.take_click() == false or
         state.button.take_click()) {
-        return SystemResult.Error(Error(1, "Button label or independent polling event differs"));
+        throw Error(1, "Button label or independent polling event differs");
       }
       // Cancel this handler before closing, then emit a queued click that must be skipped.
       var own_id = context.registration();
-      try context.disconnect(own_id);
+      context.disconnect(own_id);
       state.window.close();
       state.window.close();
-      match state.window.present() {
-        SystemResult.Ok => {
-          return SystemResult.Error(Error(1, "Closed window was presented"));
-        },
-        SystemResult.Error(_) => {},
-        SystemResult.Allocation(error) => {
-          return SystemResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return SystemResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return SystemResult.Overflow(error);
+
+      var operation_completed_1 = false;
+      try {
+        state.window.present();
+        operation_completed_1 = true;
+        throw Error(1, "Closed window was presented");
+      } catch (error: std.Error) {
+        if (operation_completed_1) {
+          throw;
         }
-      };
-      var detached = try String("Detached");
-      try state.button.set_label(detached);
+      }
+
+      var detached = String("Detached");
+      state.button.set_label(detached);
       state.button.click();
       if (state.button.take_click() == false or state.button.take_click()) {
-        return SystemResult.Error(Error(1, "Detached button event differs"));
+        throw Error(1, "Detached button event differs");
       }
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Observes closure after GTK has removed the window from its application. */
-  function closed(state: ref AppState, context: ref gtk.EventContext<AppState>) SystemResult<void> {
+  function closed(state: ref AppState, context: ref gtk.EventContext<AppState>) void throws {
     state.closed = true;
     if (state.window.is_open()) {
-      return SystemResult.Error(Error(1, "Close callback ran before window removal"));
+      throw Error(1, "Close callback ran before window removal");
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Registers named callbacks and lends state to one safe dispatch session. */
-  public function run(automated: bool) SystemResult<void> {
-    var id = try String("org.sunlang.GObjectDemo");
-    var app = try gtk.Application(id);
-    var state = try AppState(app, automated);
-    var loop = try gtk.EventLoop<AppState>(app);
-    var click_id = try loop.on_clicked(state.button, clicked);
-    var close_id = try loop.on_closed(state.window, closed);
+  public function run(automated: bool) void throws {
+    var id = String("org.sunlang.GObjectDemo");
+    var app = gtk.Application(id);
+    var state = AppState(app, automated);
+    var loop = gtk.EventLoop<AppState>(app);
+    var click_id = loop.on_clicked(state.button, clicked);
+    var close_id = loop.on_closed(state.window, closed);
     if (automated) {
-      try check_widgets(state.window, state.button);
+      check_widgets(state.window, state.button);
     }
-    try loop.run(state);
+    loop.run(state);
     if (automated) {
       if (state.clicked == false or state.closed == false) {
-        return SystemResult.Error(Error(1, "Missing GTK callback"));
+        throw Error(1, "Missing GTK callback");
       }
       std.io.println("GTK acceptance passed");
     }
-    return SystemResult.Ok;
+    return;
   }
 }
 
 /** Runs the interactive demo or its bounded safe-API acceptance scenario. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
   var automated = args.size() == 2 and args[1].equals_literal("--self-test");
-  return AllocationResult.Ok(
-    match demo.run(automated) {
-      SystemResult.Ok => 0,
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
-      }
-    }
-  );
+  try {
+    demo.run(automated);
+    return 0;
+  } catch (error: std.Error) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.AllocationError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.InvalidArgumentError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.OverflowError) {
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   libraries: [

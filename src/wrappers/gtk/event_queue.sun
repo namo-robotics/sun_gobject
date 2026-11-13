@@ -9,12 +9,12 @@ public module gtk {
     var sources: Vec<QueuedSource>;
 
     /** Retains the application and acquires exclusive default-context dispatch. */
-    init(application: ref Application) SystemResult<void> {
+    init(application: ref Application) throws {
       this.core = LoopCore(unsafe { sg_loop_new(application.raw_handle()); });
       var a = make_heap_allocator();
-      this.sources = try Vec<QueuedSource>(a, 8);
+      this.sources = Vec<QueuedSource>(a, 8);
       if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
-        return SystemResult.Error(Error(1, "Another event dispatcher owns the GTK context"));
+        throw Error(1, "Another event dispatcher owns the GTK context");
       }
     }
 
@@ -26,23 +26,23 @@ public module gtk {
     }
 
     /** Installs a signal adapter retaining its emitter independently of its wrapper. */
-    method connect(kind: u32, emitter: raw_ptr<u8>) SystemResult<RegistrationId> {
-      var number = try this.core.reserve();
+    method connect(kind: u32, emitter: raw_ptr<u8>) RegistrationId throws {
+      var number = this.core.reserve();
       var source = unsafe { sg_loop_connect(this.core.pointer, number, kind, emitter); };
       if (source == null) {
-        return SystemResult.Error(Error(1, "Window is closed or belongs to another application"));
+        throw Error(1, "Window is closed or belongs to another application");
       }
-      try this.sources.push(QueuedSource(number, kind, source));
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.sources.push(QueuedSource(number, kind, source));
+      return registration_id(this.core, number);
     }
 
     /** Queues clicks without invoking Sun code from GTK callbacks. */
-    public method on_clicked(button: ref Button) SystemResult<RegistrationId> {
+    public method on_clicked(button: ref Button) RegistrationId throws {
       return this.connect(1, unsafe { button.raw_handle(); });
     }
 
     /** Subscribes to a supported widget's activation or edit signal. */
-    public method on_widget(widget: ref Widget) SystemResult<RegistrationId> {
+    public method on_widget(widget: ref Widget) RegistrationId throws {
       require_thread();
       if (widget.kind == 10) {
         return this.connect(4, unsafe { sg_media_events(widget.pointer); });
@@ -50,70 +50,68 @@ public module gtk {
       var kind: u32 = widget.kind == 6 ? 1 : (widget.kind == 7 ? 4 : (widget.kind == 8 ? 5 : (widget.kind ==
         9 ? 6 : 0)));
       if (kind == 0) {
-        return SystemResult.Error(Error(1, "Widget has no edit signal"));
+        throw Error(1, "Widget has no edit signal");
       }
       return this.connect(kind, widget.pointer);
     }
 
     /** Queues one removal notification for a window belonging to this application. */
-    public method on_closed(window: ref Window) SystemResult<RegistrationId> {
+    public method on_closed(window: ref Window) RegistrationId throws {
       return this.connect(2, unsafe { window.raw_handle(); });
     }
 
     /** Queues a one-shot timeout; zero schedules a future native dispatch turn. */
-    public method after(delay_ms: u32) SystemResult<RegistrationId> {
-      var number = try this.core.reserve();
+    public method after(delay_ms: u32) RegistrationId throws {
+      var number = this.core.reserve();
       var source = unsafe { sg_loop_timer(this.core.pointer, number, delay_ms); };
-      try this.sources.push(QueuedSource(number, 3, source));
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.sources.push(QueuedSource(number, 3, source));
+      return registration_id(this.core, number);
     }
 
     /** Cancels future and queued deliveries; cancellation within this queue is idempotent. */
-    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
-      try validate_id(this.core, id);
+    public method disconnect(id: const ref RegistrationId) void throws {
+      validate_id(this.core, id);
       for (var i: i64 = 0; i < this.sources.size(); i += 1) {
         if (this.sources[i].number == id.number) {
-          match this.sources.remove(i) {
-            AccessResult.Ok(_) => {},
-            AccessResult.OutOfBounds(_) => {}
-          };
+          try {
+            this.sources.remove(i);
+          } catch (error: std.IndexOutOfBoundsError) {}
           break;
         }
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Takes the next live delivery, skipping canceled sources and consuming one-shot sources. */
-    public method next() AllocationResult<Option<NativeEvent>> {
+    public method next() Option<NativeEvent> throws {
       require_thread();
       while (true) {
         var number = unsafe { sg_loop_pop(this.core.pointer, 0); };
         if (number == 0) {
-          return AllocationResult.Ok(Option.None);
+          return Option.None;
         }
         for (var i: i64 = 0; i < this.sources.size(); i += 1) {
           if (this.sources[i].number == number) {
             var kind = this.sources[i].kind;
             var id = registration_id(this.core, number);
             if (kind == 2 or kind == 3) {
-              match this.sources.remove(i) {
-                AccessResult.Ok(_) => {},
-                AccessResult.OutOfBounds(_) => {}
-              };
+              try {
+                this.sources.remove(i);
+              } catch (error: std.IndexOutOfBoundsError) {}
             }
-            var event = try NativeEvent(
+            var event = NativeEvent(
               id,
               kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : (kind == 3 ? EventKind.Timer : (kind ==
                 4 ? EventKind.TextChanged : (kind == 5 ? EventKind.Toggled : EventKind.Selected))))
             );
             var a = make_heap_allocator();
-            event.text = try from_c_str(a, unsafe { sg_loop_text(this.core.pointer); });
+            event.text = from_c_str(a, unsafe { sg_loop_text(this.core.pointer); });
             event.value = unsafe { sg_loop_value(this.core.pointer); };
-            return AllocationResult.Ok(Option.Some(event));
+            return Option.Some(event);
           }
         }
       }
-      return AllocationResult.Ok(Option.None);
+      return Option.None;
     }
 
     /** Services GTK once, blocking only when requested and no deliveries are queued. */

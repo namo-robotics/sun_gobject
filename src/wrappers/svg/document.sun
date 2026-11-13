@@ -8,12 +8,12 @@ public module svg {
     var pointer: raw_ptr<u8> = null;
 
     /** Copies SVG content into librsvg-owned storage or returns a parsing error. */
-    init(content: const ref String) SystemResult<void> {
+    init(content: const ref String) throws {
       this.pointer = unsafe {
         rsvg_handle_new_from_data(content.bytes(), _convert<u64>(content.length()), null);
       };
       if (this.pointer == null) {
-        return SystemResult.Error(Error(1, "Could not parse SVG document"));
+        throw Error(1, "Could not parse SVG document");
       }
     }
 

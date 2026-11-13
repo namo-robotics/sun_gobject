@@ -4,331 +4,299 @@ using std;
 extern "C" function g_usleep(microseconds: u64) void;
 
 /** Verifies weighted grid allocation and captured editable values through checked APIs. */
-function declarative_widgets(app: ref gtk.Application) SystemResult<void> {
+function declarative_widgets(app: ref gtk.Application) void throws {
   var window = gtk.Window(app);
-  var grid = try gtk.Widget(3);
-  var left = try gtk.Widget(5);
-  var right = try gtk.Widget(5);
-  try grid.track(true, 0, 0, true);
-  try grid.track(true, 2, 1, false);
-  try grid.track(true, 2, 2, false);
-  try left.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
-  try right.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
-  try grid.place_first(left, 0, 0, 1, 1);
-  try grid.place_after(right, left, 0, 1, 1, 1);
-  try window.set_widget(grid);
-  try window.set_default_size(300, 100);
-  try window.present();
+  var grid = gtk.Widget(3);
+  var left = gtk.Widget(5);
+  var right = gtk.Widget(5);
+  grid.track(true, 0, 0, true);
+  grid.track(true, 2, 1, false);
+  grid.track(true, 2, 2, false);
+  left.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
+  right.properties(true, true, 0, -1, -1, 0, 0, true, false, 0);
+  grid.place_first(left, 0, 0, 1, 1);
+  grid.place_after(right, left, 0, 1, 1, 1);
+  window.set_widget(grid);
+  window.set_default_size(300, 100);
+  window.present();
   for (var i: i64 = 0; i < 100 and left.extent(true) == 0; i += 1) {
     app.iterate(false);
     unsafe { g_usleep(10000); };
   }
   if (left.extent(true) <= 0 or right.extent(true) < left.extent(true) * 2 - 2 or
     right.extent(true) > left.extent(true) * 2 + 2) {
-    return SystemResult.Error(Error(1, "Weighted tracks did not share remaining space"));
+    throw Error(1, "Weighted tracks did not share remaining space");
   }
-  match grid.place_first(grid, 0, 0, 1, 1) {
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
-    },
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Grid accepted self parenting"));
+
+  var operation_completed_10 = false;
+  try {
+    grid.place_first(grid, 0, 0, 1, 1);
+    operation_completed_10 = true;
+    throw Error(1, "Grid accepted self parenting");
+  } catch (error: std.Error) {
+    if (operation_completed_10) {
+      throw;
     }
-  };
-  var entry = try gtk.Widget(7);
-  var select = try gtk.Widget(9);
-  var queue = try gtk.EventQueue(app);
-  var entry_id = try queue.on_widget(entry);
-  var select_id = try queue.on_widget(select);
-  var text = try String("alpha");
-  try entry.edit(text, 0);
-  text = try String("beta");
-  try entry.edit(text, 0);
-  var labels = try String("First");
-  var key = try String("stable-first");
-  try select.clear_options();
-  try select.add_option(labels, key);
-  labels = try String("Second");
-  key = try String("stable-second");
-  try select.add_option(labels, key);
-  try select.set_value(0);
-  try select.edit(text, 1);
-  try select.clear_options();
-  labels = try String("Replacement");
-  key = try String("replacement");
-  try select.add_option(labels, key);
+  }
+
+  var entry = gtk.Widget(7);
+  var select = gtk.Widget(9);
+  var queue = gtk.EventQueue(app);
+  var entry_id = queue.on_widget(entry);
+  var select_id = queue.on_widget(select);
+  var text = String("alpha");
+  entry.edit(text, 0);
+  text = String("beta");
+  entry.edit(text, 0);
+  var labels = String("First");
+  var key = String("stable-first");
+  select.clear_options();
+  select.add_option(labels, key);
+  labels = String("Second");
+  key = String("stable-second");
+  select.add_option(labels, key);
+  select.set_value(0);
+  select.edit(text, 1);
+  select.clear_options();
+  labels = String("Replacement");
+  key = String("replacement");
+  select.add_option(labels, key);
   for (var i: i64 = 0; i < 3; i += 1) {
-    match try queue.next() {
+    match queue.next() {
       Option.Some(event) => {
-        var expected = try String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
+        var expected = String(i == 0 ? "alpha" : (i == 1 ? "beta" : "stable-second"));
 
         if (not event.text.equals(expected)) {
-          return SystemResult.Error(Error(1, "Native edit snapshot was changed before delivery"));
+          throw Error(1, "Native edit snapshot was changed before delivery");
         }
       },
       Option.None => {
-        return SystemResult.Error(Error(1, "Native edit snapshot was lost"));
+        throw Error(1, "Native edit snapshot was lost");
       }
     };
   }
-  text = try String("programmatic");
-  try entry.set_text(text);
-  match try queue.next() {
+  text = String("programmatic");
+  entry.set_text(text);
+  match queue.next() {
     Option.None => {},
     Option.Some(_) => {
-      return SystemResult.Error(Error(1, "Controlled setter emitted a user edit"));
+      throw Error(1, "Controlled setter emitted a user edit");
     }
   };
-  try queue.disconnect(entry_id);
-  try queue.disconnect(select_id);
+  queue.disconnect(entry_id);
+  queue.disconnect(select_id);
   window.close();
-  return SystemResult.Ok;
+  return;
 }
 
 /** Checks ownership, validation, composition, drawing, and chooser cleanup using safe APIs. */
-function run() SystemResult<void> {
-  var id = try String("org.sunlang.CheckedWidgetsTest");
-  var app = try gtk.Application(id);
+function run() void throws {
+  var id = String("org.sunlang.CheckedWidgetsTest");
+  var app = gtk.Application(id);
   var window = gtk.Window(app);
-  var root = try gtk.Box(gtk.Orientation.Vertical, 8);
-  var toolbar = try gtk.Box(gtk.Orientation.Horizontal, 8);
-  var text = try String("Ready");
-  var label = try gtk.Label(text);
-  var area = try gtk.DrawingArea();
-  try toolbar.append(label);
-  try root.append(toolbar);
-  try root.append(area);
+  var root = gtk.Box(gtk.Orientation.Vertical, 8);
+  var toolbar = gtk.Box(gtk.Orientation.Horizontal, 8);
+  var text = String("Ready");
+  var label = gtk.Label(text);
+  var area = gtk.DrawingArea();
+  toolbar.append(label);
+  root.append(toolbar);
+  root.append(area);
   area.set_vexpand(true);
-  match root.append(label) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Reparenting a label was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+
+  var operation_completed_9 = false;
+  try {
+    root.append(label);
+    operation_completed_9 = true;
+    throw Error(1, "Reparenting a label was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_9) {
+      throw;
     }
-  };
-  match toolbar.append(root) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "A parenting cycle was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
-    }
-  };
-  var invalid = try String("bad");
-  try invalid.append_char(0);
-  match label.set_text(invalid) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Embedded NUL was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
-    }
-  };
-  var unchanged = try label.text();
-  if (unchanged.equals_literal("Ready") == false) {
-    return SystemResult.Error(Error(1, "Invalid text changed the label"));
   }
-  var malformed = try String("<svg");
-  match svg.Document(malformed) {
-    SystemResult.Ok(_) => {
-      return SystemResult.Error(Error(1, "Malformed SVG was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+
+  var operation_completed_8 = false;
+  try {
+    toolbar.append(root);
+    operation_completed_8 = true;
+    throw Error(1, "A parenting cycle was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_8) {
+      throw;
     }
-  };
+  }
+
+  var invalid = String("bad");
+  invalid.append_char(0);
+
+  var operation_completed_7 = false;
+  try {
+    label.set_text(invalid);
+    operation_completed_7 = true;
+    throw Error(1, "Embedded NUL was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_7) {
+      throw;
+    }
+  }
+
+  var unchanged = label.text();
+  if (unchanged.equals_literal("Ready") == false) {
+    throw Error(1, "Invalid text changed the label");
+  }
+  var malformed = String("<svg");
+
+  var operation_completed_6 = false;
+  try {
+    svg.Document(malformed);
+    operation_completed_6 = true;
+    throw Error(1, "Malformed SVG was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_6) {
+      throw;
+    }
+  }
+
   // The area must retain its document after the source wrapper leaves scope.
   if (true) {
-    var content = try String(
+    var content = String(
       "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"><circle cx=\"100\" cy=\"50\" r=\"30\"/></svg>"
     );
 
-    var document = try svg.Document(content);
+    var document = svg.Document(content);
     area.set_document(document);
   }
-  try window.set_box(root);
-  try window.set_default_size(400, 300);
-  try window.present();
+  window.set_box(root);
+  window.set_default_size(400, 300);
+  window.present();
   for (var i: i64 = 0; i < 200 and area.rendered() == false; i += 1) {
     app.iterate(false);
     unsafe { g_usleep(10000); };
   }
   if (area.rendered() == false or area.render_failed()) {
-    return SystemResult.Error(Error(1, "Retained document did not render"));
+    throw Error(1, "Retained document did not render");
   }
   std.io.eprintln("Drawing rendered; checking save dialog");
   var chooser = gtk.SaveDialog();
-  var title = try String("Save test");
-  var filename = try String("test.svg");
-  try chooser.show(window, title, filename);
+  var title = String("Save test");
+  var filename = String("test.svg");
+  chooser.show(window, title, filename);
   std.io.eprintln("Save dialog shown; checking cancellation");
-  match chooser.show(window, title, filename) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Concurrent save request was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+
+  var operation_completed_5 = false;
+  try {
+    chooser.show(window, title, filename);
+    operation_completed_5 = true;
+    throw Error(1, "Concurrent save request was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_5) {
+      throw;
     }
-  };
+  }
+
   chooser.cancel();
   chooser.cancel();
   if (chooser.is_open()) {
-    return SystemResult.Error(Error(1, "Cancelled chooser remained open"));
+    throw Error(1, "Cancelled chooser remained open");
   }
-  match try chooser.take_path() {
+  match chooser.take_path() {
     Option.Some(_) => {
-      return SystemResult.Error(Error(1, "Cancelled chooser returned a path"));
+      throw Error(1, "Cancelled chooser returned a path");
     },
     Option.None => {}
   };
   std.io.eprintln("Save dialog cancelled; checking open dialog");
   var open = gtk.OpenDialog();
-  try open.show(window, title);
+  open.show(window, title);
   std.io.eprintln("Open dialog shown; checking cancellation");
-  match open.show(window, title) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Concurrent open request was accepted"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+
+  var operation_completed_4 = false;
+  try {
+    open.show(window, title);
+    operation_completed_4 = true;
+    throw Error(1, "Concurrent open request was accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_4) {
+      throw;
     }
-  };
+  }
+
   open.cancel();
   open.cancel();
   if (open.is_open()) {
-    return SystemResult.Error(Error(1, "Cancelled open chooser remained open"));
+    throw Error(1, "Cancelled open chooser remained open");
   }
-  match try open.take_path() {
+  match open.take_path() {
     Option.Some(_) => {
-      return SystemResult.Error(Error(1, "Cancelled open chooser returned a path"));
+      throw Error(1, "Cancelled open chooser returned a path");
     },
     Option.None => {}
   };
   window.close();
-  match open.show(window, title) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Closed parent accepted an open request"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+
+  var operation_completed_3 = false;
+  try {
+    open.show(window, title);
+    operation_completed_3 = true;
+    throw Error(1, "Closed parent accepted an open request");
+  } catch (error: std.Error) {
+    if (operation_completed_3) {
+      throw;
     }
-  };
-  match chooser.show(window, title, filename) {
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Closed parent accepted a save request"));
-    },
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
+  }
+
+  var operation_completed_2 = false;
+  try {
+    chooser.show(window, title, filename);
+    operation_completed_2 = true;
+    throw Error(1, "Closed parent accepted a save request");
+  } catch (error: std.Error) {
+    if (operation_completed_2) {
+      throw;
     }
-  };
+  }
+
   std.io.eprintln("Dialogs closed; checking declarative widgets");
-  try declarative_widgets(app);
-  try kept_media_sections(app);
+  declarative_widgets(app);
+  kept_media_sections(app);
   std.io.println("Checked drawing widgets passed");
-  return SystemResult.Ok;
+  return;
 }
 
 /** Exercises shared-boundary drags and rejects malformed kept-section updates. */
-function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
+function kept_media_sections(app: ref gtk.Application) void throws {
   var window = gtk.Window(app);
-  var media = try gtk.Widget(10);
-  var path = try String("");
-  try media.media(path, 4000000, 0, 2000000, 0);
-  var ranges = try String("1,0,2000000;2,2000000,4000000");
-  try media.media_ranges(ranges, 1);
-  var invalid = try String("1,0,3000000;2,2000000,4000000");
-  match media.media_ranges(invalid, 1) {
-    SystemResult.Error(_) => {},
-    SystemResult.Allocation(error) => {
-      return SystemResult.Allocation(error);
-    },
-    SystemResult.InvalidArgument(error) => {
-      return SystemResult.InvalidArgument(error);
-    },
-    SystemResult.Overflow(error) => {
-      return SystemResult.Overflow(error);
-    },
-    SystemResult.Ok => {
-      return SystemResult.Error(Error(1, "Overlapping media ranges accepted"));
+  var media = gtk.Widget(10);
+  var path = String("");
+  media.media(path, 4000000, 0, 2000000, 0);
+  var ranges = String("1,0,2000000;2,2000000,4000000");
+  media.media_ranges(ranges, 1);
+  var invalid = String("1,0,3000000;2,2000000,4000000");
+
+  var operation_completed_1 = false;
+  try {
+    media.media_ranges(invalid, 1);
+    operation_completed_1 = true;
+    throw Error(1, "Overlapping media ranges accepted");
+  } catch (error: std.Error) {
+    if (operation_completed_1) {
+      throw;
     }
-  };
-  try window.set_widget(media);
-  try window.set_default_size(800, 500);
-  try window.present();
+  }
+
+  window.set_widget(media);
+  window.set_default_size(800, 500);
+  window.present();
   for (var i: i64 = 0; i < 50; i += 1) {
     app.iterate(false);
     unsafe { g_usleep(10000); };
   }
-  var queue = try gtk.EventQueue(app);
-  var registration = try queue.on_widget(media);
-  try media.drag_media(0.5, 0.75);
+  var queue = gtk.EventQueue(app);
+  var registration = queue.on_widget(media);
+  media.drag_media(0.5, 0.75);
   var edited = false;
   while (true) {
-    match try queue.next() {
+    match queue.next() {
       Option.Some(event) => {
         edited = edited or event.text.equals_literal("3000000:4000000:3000000:2");
       },
@@ -338,26 +306,22 @@ function kept_media_sections(app: ref gtk.Application) SystemResult<void> {
     };
   }
   if (not edited) {
-    return SystemResult.Error(
-      Error(1, "Shared trim boundary did not select the right start handle")
-    );
+    throw Error(1, "Shared trim boundary did not select the right start handle");
   }
-  try queue.disconnect(registration);
+  queue.disconnect(registration);
   window.close();
-  return SystemResult.Ok;
+  return;
 }
 
 /** Reports native wrapper acceptance failures to the parent test process. */
-function main() AllocationResult<i32> {
-  return AllocationResult.Ok(
-    match run() {
-      SystemResult.Ok => 0,
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
-      }
-    }
-  );
+function main() i32 throws {
+  try {
+    run();
+    return 0;
+  } catch (error: std.Error) {
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   libraries: [

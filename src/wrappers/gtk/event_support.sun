@@ -71,11 +71,11 @@ public module gtk {
   enum EventCommand<State> { Add(Handler<State>), Remove(u64) }
 
   /** Validates a token before cancellation; stale tokens from this loop remain harmless. */
-  function validate_id(core: ref LoopCore, id: const ref RegistrationId) SystemResult<void> {
+  function validate_id(core: ref LoopCore, id: const ref RegistrationId) void throws {
     require_thread();
     if (id.owner != unsafe { sg_loop_identity(core.pointer); }) {
-      return SystemResult.Error(Error(1, "Registration belongs to another event loop"));
+      throw Error(1, "Registration belongs to another event loop");
     }
-    return SystemResult.Ok;
+    return;
   }
 }

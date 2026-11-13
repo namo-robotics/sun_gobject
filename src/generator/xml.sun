@@ -24,76 +24,76 @@ public module xml {
     public var parent: i64;
 
     /** Initializes Node with the supplied owned values or native pointer contract. */
-    init(name: String, parent: i64) AllocationResult<void> {
+    init(name: String, parent: i64) throws {
       var a = make_heap_allocator();
       this.name = name;
       this.parent = parent;
-      this.attributes = try Vec<Attribute>(a, 4);
-      this.text = try String(a, "");
+      this.attributes = Vec<Attribute>(a, 4);
+      this.text = String(a, "");
     }
 
     /** Copies an attribute value, returning an empty string when absent. */
-    public const method attr(key: static_ptr<u8>) AllocationResult<String> {
+    public const method attr(key: static_ptr<u8>) String throws {
       var a = make_heap_allocator();
       for (var i: i64 = 0; i < this.attributes.size(); i += 1) {
         if (this.attributes[i].name.equals_literal(key)) {
-          return AllocationResult.Ok(try this.attributes[i].value.clone(a));
+          return this.attributes[i].value.clone(a);
         }
       }
-      return AllocationResult.Ok(try String(a, ""));
+      return String(a, "");
     }
   }
 
   /** Maps expanded names to the stable names consumed by GIR generation. */
-  function canonical(name: const ref std.xml.XmlName) AllocationResult<String> {
+  function canonical(name: const ref std.xml.XmlName) String throws {
     var a = make_heap_allocator();
     var uri = name.uri();
-    var result = try String("");
+    var result = String("");
     if (uri.is_empty() or uri.equals_literal("http://www.gtk.org/introspection/core/1.0")) {
-      return AllocationResult.Ok(try name.local().clone(a));
+      return name.local().clone(a);
     }
     if (uri.equals_literal("http://www.gtk.org/introspection/c/1.0")) {
-      try result.append("c:");
+      result.append("c:");
     } else if (uri.equals_literal("http://www.gtk.org/introspection/glib/1.0")) {
-      try result.append("glib:");
+      result.append("glib:");
     } else if (uri.equals_literal("http://www.w3.org/XML/1998/namespace")) {
-      try result.append("xml:");
+      result.append("xml:");
     } else {
-      try result.append("{");
-      try result.append(uri);
-      try result.append("}");
+      result.append("{");
+      result.append(uri);
+      result.append("}");
     }
-    try result.append(name.local());
-    return AllocationResult.Ok(result);
+    result.append(name.local());
+    return result;
   }
 
   /** Copies a reader element into the generator's indexed representation. */
-  function node(element: const ref std.xml.XmlElement, parent: i64) std.Result<Node> {
+  function node(element: const ref std.xml.XmlElement, parent: i64) Node throws {
     var a = make_heap_allocator();
-    var result = try Node(try canonical(element.name()), parent);
+    var result = Node(canonical(element.name()), parent);
     for (var i: i64 = 0; i < element.namespace_count(); i += 1) {
-      var declaration = try element.namespace_at(i);
-      var name = try String("xmlns");
+      var declaration = element.namespace_at(i);
+      var name = String("xmlns");
       if (not declaration.declared_prefix().is_empty()) {
-        try name.append(":");
-        try name.append(declaration.declared_prefix());
+        name.append(":");
+        name.append(declaration.declared_prefix());
       }
-      try result.attributes.push(
-        Attribute(name, try declaration.namespace_uri().clone(a))
+      result.attributes.push(
+        Attribute(name, declaration.namespace_uri().clone(a))
       );
     }
     for (var i: i64 = 0; i < element.attribute_count(); i += 1) {
-      var name = try element.attribute_name(i);
+      var name = element.attribute_name(i);
       match element.attribute(name) {
         Option.Some(value) => {
-          try result.attributes.push(
-            Attribute(try canonical(name), try value.clone(a))
+          result.attributes.push(
+            Attribute(canonical(name), value.clone(a))
           );
         },
         Option.None => {}
       };
     }
-    return std.Result.Ok(result);
+    return result;
   }
 
   /** Owns input and the GIR tree; standard-library XML owns all parsing rules. */
@@ -103,37 +103,37 @@ public module xml {
     var filename: String;
 
     /** Retains original input so diagnostics refer to the supplied file. */
-    init(input: String, filename: String) AllocationResult<void> {
+    init(input: String, filename: String) throws {
       var a = make_heap_allocator();
-      this.nodes = try Vec<Node>(a, 64);
+      this.nodes = Vec<Node>(a, 64);
       this.input = input;
       this.filename = filename;
     }
 
     /** Converts owned reader events without retaining borrows into parser state. */
-    method read() std.Result<void> {
+    method read() void throws {
       var a = make_heap_allocator();
-      var reader = try std.xml.XmlReader(a, this.input);
+      var reader = std.xml.XmlReader(a, this.input);
       var current: i64 = -1;
       this.nodes.clear();
       while (true) {
-        match try reader.next() {
+        match reader.next() {
           Option.None => {
-            return std.Result.Ok;
+            return;
           },
           Option.Some(event) => {
             match event {
               std.xml.XmlEvent.Start(element) => {
-                var item = try node(element, current);
+                var item = node(element, current);
                 current = this.nodes.size();
-                try this.nodes.push(item);
+                this.nodes.push(item);
               },
               std.xml.XmlEvent.End(_) => {
                 current = this.nodes[current].parent;
               },
               std.xml.XmlEvent.Text(text) => {
                 if (current >= 0) {
-                  try this.nodes[current].text.append(text);
+                  this.nodes[current].text.append(text);
                 }
               },
               std.xml.XmlEvent.Comment(_) => {},
@@ -142,31 +142,29 @@ public module xml {
           }
         };
       }
-      return std.Result.Ok;
+      return;
     }
 
     /** Stops generation on malformed XML, preserving filename and source location. */
-    public method parse() AllocationResult<void> {
-      match this.read() {
-        std.Result.Ok => {},
-        std.Result.Xml(error) => {
-          var a = make_heap_allocator();
-          var message = try this.filename.clone(a);
-          try message.append(":");
-          try message.append(error.line());
-          try message.append(":");
-          try message.append(error.column());
-          try message.append(": ");
-          try message.append(try error.message());
+    public method parse() void throws {
+      try {
+        this.read();
+      } catch (error: std.xml.XmlError) {
+        var a = make_heap_allocator();
+        var message = this.filename.clone(a);
+        message.append(":");
+        message.append(error.line());
+        message.append(":");
+        message.append(error.column());
+        message.append(": ");
+        message.append(error.message());
 
-          fail(message);
-        },
-        (error: const ref IError) => {
-          _panic("unable to allocate XML parser storage");
-        }
-      };
+        fail(message);
+      } catch {
+        _panic("unable to allocate XML parser storage");
+      }
 
-      return AllocationResult.Ok;
+      return;
     }
   }
 }

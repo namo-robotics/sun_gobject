@@ -19,20 +19,20 @@ public module gtk {
     }
 
     /** Presents one open request; invalid text, a closed parent, or an active request returns an error. */
-    public method show(parent: ref Window, title: ref String) SystemResult<void> {
+    public method show(parent: ref Window, title: ref String) void throws {
       require_thread();
-      try validate(title);
+      validate(title);
       if (this.pointer != null) {
-        return SystemResult.Error(Error(1, "Open dialog is already open"));
+        throw Error(1, "Open dialog is already open");
       }
       if (parent.is_open() == false) {
-        return SystemResult.Error(Error(1, "Open dialog parent is closed"));
+        throw Error(1, "Open dialog parent is closed");
       }
       unsafe {
         this.parent = parent.raw_handle();
         gobject.raw.g_object_ref(this.parent);
         this.pointer = gtk_file_chooser_native_new(
-          try title.c_str(),
+          title.c_str(),
           this.parent,
           0,
           "Open",
@@ -42,7 +42,7 @@ public module gtk {
         gtk_native_dialog_set_modal(this.pointer, 1);
         gtk_native_dialog_show(this.pointer);
       };
-      return SystemResult.Ok;
+      return;
     }
 
     /** Reports whether a request is pending or awaiting consumption. */
@@ -52,21 +52,21 @@ public module gtk {
     }
 
     /** Returns a selected local path once; pending and cancelled requests return None. */
-    public method take_path() SystemResult<Option<String>> {
+    public method take_path() Option<String> throws {
       require_thread();
       if (this.pointer == null) {
-        return SystemResult.Ok(Option.None);
+        return Option.None;
       }
       if (unsafe { sg_window_is_open(this.parent); } == 0) {
         this.cancel();
-        return SystemResult.Ok(Option.None);
+        return Option.None;
       }
       if (unsafe { g_object_get_data(this.pointer, "sun-gtk-save-done"); } == null) {
-        return SystemResult.Ok(Option.None);
+        return Option.None;
       }
       if (unsafe { g_object_get_data(this.pointer, "sun-gtk-save-accepted"); } == null) {
         this.cancel();
-        return SystemResult.Ok(Option.None);
+        return Option.None;
       }
       var file = unsafe { gtk_file_chooser_get_file(this.pointer); };
       var native_path: raw_ptr<u8> = null;
@@ -76,12 +76,12 @@ public module gtk {
       }
       this.cancel();
       if (native_path == null) {
-        return SystemResult.Error(Error(1, "Input must be a local file"));
+        throw Error(1, "Input must be a local file");
       }
       var a = make_heap_allocator();
       var path = from_c_str(a, native_path);
       unsafe { g_free(native_path); };
-      return SystemResult.Ok(Option.Some(try path));
+      return Option.Some(path);
     }
 
     /** Cancels an active request and releases all native resources; repeated calls are harmless. */

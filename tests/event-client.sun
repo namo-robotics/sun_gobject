@@ -4,11 +4,11 @@ using std;
 module event_checks {
 
   /** Reports an invariant failure without terminating callback cleanup. */
-  function expect(condition: bool, message: static_ptr<u8>) SystemResult<void> {
+  function expect(condition: bool, message: static_ptr<u8>) void throws {
     if (condition == false) {
-      return SystemResult.Error(Error(1, message));
+      throw Error(1, message);
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Owns widgets and explicit state shared by each scenario's callbacks. */
@@ -23,463 +23,439 @@ module event_checks {
     var mark: std.time.Instant;
 
     /** Creates an application window without requiring it to be displayed. */
-    init(app: ref gtk.Application) SystemResult<void> {
+    init(app: ref gtk.Application) throws {
       this.window = gtk.Window(app);
-      var label = try String("events");
-      this.button = try gtk.Button(label);
-      try this.window.set_child(this.button);
-      this.trace = try String("");
+      var label = String("events");
+      this.button = gtk.Button(label);
+      this.window.set_child(this.button);
+      this.trace = String("");
       this.mark = std.time.now();
     }
   }
 
   /** Fails if a cancelled or newly registered handler receives an old event. */
-  function unexpected(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    return SystemResult.Error(Error(1, "Unexpected callback delivery"));
+  function unexpected(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    throw Error(1, "Unexpected callback delivery");
   }
 
   /** Records one close after GTK has removed the window. */
-  function closed(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(context.kind() == gtk.EventKind.Closed, "Wrong close event kind");
-    try expect(state.window.is_open() == false, "Close notification preceded removal");
-    try state.trace.append("D");
-    return SystemResult.Ok;
+  function closed(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(context.kind() == gtk.EventKind.Closed, "Wrong close event kind");
+    expect(state.window.is_open() == false, "Close notification preceded removal");
+    state.trace.append("D");
+    return;
   }
 
   /** Cancels itself and the next queued handler, then emits a non-reentrant click. */
-  function first(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(context.kind() == gtk.EventKind.Clicked, "Wrong click event kind");
-    try state.trace.append("A");
+  function first(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(context.kind() == gtk.EventKind.Clicked, "Wrong click event kind");
+    state.trace.append("A");
     state.inside = true;
     var own = context.registration();
-    try context.disconnect(own);
-    try context.disconnect(own);
+    context.disconnect(own);
+    context.disconnect(own);
     match state.target {
       Option.Some(id) => {
-        try context.disconnect(id);
+        context.disconnect(id);
       },
       Option.None => {}
     };
     state.button.click();
-    try expect(state.trace.equals_literal("A"), "Click dispatch was recursive");
+    expect(state.trace.equals_literal("A"), "Click dispatch was recursive");
     state.inside = false;
-    return SystemResult.Ok;
+    return;
   }
 
   /** Records ordered surviving handlers and closes after the queued second click. */
-  function third(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(state.inside == false, "Callback entered another callback");
-    try state.trace.append("C");
+  function third(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(state.inside == false, "Callback entered another callback");
+    state.trace.append("C");
     state.count += 1;
     if (state.count == 2) {
       state.window.close();
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks handler ordering, cancellation of queued work, and independent polling. */
-  function ordering() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Order");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var a = try loop.on_clicked(state.button, first);
-    state.target = Option.Some(try loop.on_clicked(state.button, unexpected));
+  function ordering() void throws {
+    var id = String("org.sunlang.Events.Order");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var a = loop.on_clicked(state.button, first);
+    state.target = Option.Some(loop.on_clicked(state.button, unexpected));
     // Dropping the returned ID must not disconnect a loop-owned registration.
     if (true) {
-      var c = try loop.on_clicked(state.button, third);
+      var c = loop.on_clicked(state.button, third);
     }
-    var d = try loop.on_closed(state.window, closed);
+    var d = loop.on_closed(state.window, closed);
     state.button.click();
-    try loop.run(state);
-    try expect(state.trace.equals_literal("ACCD"), "FIFO handler order or cancellation differs");
-    try expect(
+    loop.run(state);
+    expect(state.trace.equals_literal("ACCD"), "FIFO handler order or cancellation differs");
+    expect(
       state.button.take_click() and state.button.take_click() and
         state.button.take_click() == false,
       "Polling stole registered events"
     );
-    try loop.disconnect(a);
-    try loop.disconnect(d);
-    match loop.after(0, unexpected) {
-      SystemResult.Ok(_) => {
-        return SystemResult.Error(Error(1, "Completed loop accepted registration"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    loop.disconnect(a);
+    loop.disconnect(d);
+
+    var operation_completed_12 = false;
+    try {
+      loop.after(0, unexpected);
+      operation_completed_12 = true;
+      throw Error(1, "Completed loop accepted registration");
+    } catch (error: std.Error) {
+      if (operation_completed_12) {
+        throw;
       }
-    };
-    match loop.run(state) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Completed loop ran twice"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+    }
+
+    var operation_completed_11 = false;
+    try {
+      loop.run(state);
+      operation_completed_11 = true;
+      throw Error(1, "Completed loop ran twice");
+    } catch (error: std.Error) {
+      if (operation_completed_11) {
+        throw;
       }
-    };
-    return SystemResult.Ok;
+    }
+
+    return;
   }
 
   /** Delivers only the future click produced by a deferred timer. */
-  function added(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try state.trace.append("N");
+  function added(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    state.trace.append("N");
     state.window.close();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Emits the future click after registration changes have been committed. */
-  function emit_later(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(state.trace.equals_literal("S"), "Deferred timer ran inside registration callback");
+  function emit_later(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(state.trace.equals_literal("S"), "Deferred timer ran inside registration callback");
     state.button.click();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Stages a new handler and timers, cancelling both itself and a new timer. */
-  function stage(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try state.trace.append("S");
-    var added_id = try context.on_clicked(state.button, added);
-    var cancelled = try context.after(0, unexpected);
-    try context.disconnect(cancelled);
-    var timer = try context.after(0, emit_later);
+  function stage(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    state.trace.append("S");
+    var added_id = context.on_clicked(state.button, added);
+    var cancelled = context.after(0, unexpected);
+    context.disconnect(cancelled);
+    var timer = context.after(0, emit_later);
     var own = context.registration();
-    try context.disconnect(own);
+    context.disconnect(own);
     state.button.click();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks that additions observe future events and same-callback cancellation works. */
-  function deferred() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Deferred");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var handler = try loop.on_clicked(state.button, stage);
+  function deferred() void throws {
+    var id = String("org.sunlang.Events.Deferred");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var handler = loop.on_clicked(state.button, stage);
     state.button.click();
-    try loop.run(state);
-    try expect(state.trace.equals_literal("SN"), "Deferred registrations observed an old event");
-    return SystemResult.Ok;
+    loop.run(state);
+    expect(state.trace.equals_literal("SN"), "Deferred registrations observed an old event");
+    return;
   }
 
   /** Finishes after a timer has been cancelled from its own callback. */
-  function stop_timer(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(state.count == 2, "Repeating timer delivered after cancellation");
+  function stop_timer(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(state.count == 2, "Repeating timer delivered after cancellation");
     state.window.close();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Sleeps once and checks the next interval starts after callback completion. */
-  function tick(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    try expect(context.kind() == gtk.EventKind.Timer, "Wrong timer event kind");
+  function tick(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    expect(context.kind() == gtk.EventKind.Timer, "Wrong timer event kind");
     state.count += 1;
     if (state.count == 1) {
       std.time.sleep(std.time.create_duration_millis(35));
       state.mark = std.time.now();
     } else {
-      try expect(
+      expect(
         state.mark.elapsed().as_millis() >= 10,
         "Repeating timer caught up instead of delaying"
       );
       var own = context.registration();
-      try context.disconnect(own);
-      var stop = try context.after(30, stop_timer);
+      context.disconnect(own);
+      var stop = context.after(30, stop_timer);
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks positive intervals, pre-delivery cancellation, and non-catch-up repetition. */
-  function timers() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Timers");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    match loop.every(0, unexpected) {
-      SystemResult.Ok(_) => {
-        return SystemResult.Error(Error(1, "Zero repeating interval accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+  function timers() void throws {
+    var id = String("org.sunlang.Events.Timers");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+
+    var operation_completed_10 = false;
+    try {
+      loop.every(0, unexpected);
+      operation_completed_10 = true;
+      throw Error(1, "Zero repeating interval accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_10) {
+        throw;
       }
-    };
-    var cancel = try loop.after(0, unexpected);
-    try loop.disconnect(cancel);
-    var repeated = try loop.every(15, tick);
-    try loop.run(state);
-    try expect(state.count == 2, "Timer count differs");
-    return SystemResult.Ok;
+    }
+
+    var cancel = loop.after(0, unexpected);
+    loop.disconnect(cancel);
+    var repeated = loop.every(15, tick);
+    loop.run(state);
+    expect(state.count == 2, "Timer count differs");
+    return;
   }
 
   /** Requests exit without closing its window or dispatching later queued work. */
-  function quit(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function quit(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.count += 1;
     context.quit();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Returns a callback failure after staging work that must be discarded. */
-  function fail(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    var timer = try context.after(0, unexpected);
-    return SystemResult.Error(Error(77, "expected callback failure"));
+  function fail(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    var timer = context.after(0, unexpected);
+    throw Error(77, "expected callback failure");
   }
 
   /** Checks explicit quit, error propagation, and source cleanup after completion. */
-  function completion() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Completion");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var q = try loop.on_clicked(state.button, quit);
-    var later = try loop.on_clicked(state.button, unexpected);
+  function completion() void throws {
+    var id = String("org.sunlang.Events.Completion");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var q = loop.on_clicked(state.button, quit);
+    var later = loop.on_clicked(state.button, unexpected);
     state.button.click();
-    try loop.run(state);
-    try expect(
+    loop.run(state);
+    expect(
       state.count == 1 and state.window.is_open(),
       "Quit did not stop after current callback"
     );
     state.button.click();
-    var id2 = try String("org.sunlang.Events.Failure");
-    var app2 = try gtk.Application(id2);
-    var state2 = try State(app2);
-    var loop2 = try gtk.EventLoop<State>(app2);
-    var f = try loop2.on_clicked(state2.button, fail);
+    var id2 = String("org.sunlang.Events.Failure");
+    var app2 = gtk.Application(id2);
+    var state2 = State(app2);
+    var loop2 = gtk.EventLoop<State>(app2);
+    var f = loop2.on_clicked(state2.button, fail);
     state2.button.click();
-    match loop2.run(state2) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Callback error was swallowed"));
-      },
-      SystemResult.Error(error) => {
-        try expect(error.code() == 77, "Callback error was replaced");
-      },
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+
+    var operation_completed_9 = false;
+    try {
+      loop2.run(state2);
+      operation_completed_9 = true;
+      throw Error(1, "Callback error was swallowed");
+    } catch (error: std.Error) {
+      if (operation_completed_9) {
+        throw;
       }
-    };
+      expect(error.code() == 77, "Callback error was replaced");
+    }
+
     state2.button.click();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Creates and registers a replacement window from a close callback. */
-  function replace(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function replace(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.count += 1;
     var window = context.create_window();
-    var close = try context.on_closed(window, replacement_closed);
+    var close = context.on_closed(window, replacement_closed);
     state.replacement = Option.Some(window);
-    var timer = try context.after(0, close_replacement);
-    return SystemResult.Ok;
+    var timer = context.after(0, close_replacement);
+    return;
   }
 
   /** Closes the replacement after its close notification has been registered. */
-  function close_replacement(
-    state: ref State,
-    context: ref gtk.EventContext<State>
-  ) SystemResult<void> {
+  function close_replacement(state: ref State, context: ref gtk.EventContext<State>) void throws {
     match state.replacement {
       Option.Some(window) => {
         window.close();
       },
       Option.None => {
-        return SystemResult.Error(Error(1, "Missing replacement window"));
+        throw Error(1, "Missing replacement window");
       }
     };
-    return SystemResult.Ok;
+    return;
   }
 
   /** Records the final close; pending timers must not keep the loop alive. */
-  function replacement_closed(
-    state: ref State,
-    context: ref gtk.EventContext<State>
-  ) SystemResult<void> {
+  function replacement_closed(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.count += 1;
-    var unused = try context.every(60000, unexpected);
-    return SystemResult.Ok;
+    var unused = context.every(60000, unexpected);
+    return;
   }
 
   /** Checks close delivery before automatic exit and replacement-window continuation. */
-  function windows() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Windows");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var close = try loop.on_closed(state.window, replace);
+  function windows() void throws {
+    var id = String("org.sunlang.Events.Windows");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var close = loop.on_closed(state.window, replace);
     state.window.close();
-    try loop.run(state);
-    try expect(state.count == 2, "Close callbacks or replacement window were skipped");
-    return SystemResult.Ok;
+    loop.run(state);
+    expect(state.count == 2, "Close callbacks or replacement window were skipped");
+    return;
   }
 
   /** Rejects nested dispatch while allowing the outer loop to complete. */
-  function nested(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    var id = try String("org.sunlang.Events.Inner");
-    var app = try gtk.Application(id);
-    var inner = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    match loop.run(inner) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Nested dispatch was accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+  function nested(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    var id = String("org.sunlang.Events.Inner");
+    var app = gtk.Application(id);
+    var inner = State(app);
+    var loop = gtk.EventLoop<State>(app);
+
+    var operation_completed_8 = false;
+    try {
+      loop.run(inner);
+      operation_completed_8 = true;
+      throw Error(1, "Nested dispatch was accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_8) {
+        throw;
       }
-    };
+    }
+
     state.count += 1;
     context.quit();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks loop identity and protects the native context from recursive dispatch. */
-  function identities() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Outer");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var token = try loop.on_clicked(state.button, nested);
-    var other_id = try String("org.sunlang.Events.Other");
-    var other_app = try gtk.Application(other_id);
-    var other = try gtk.EventLoop<State>(other_app);
-    match other.disconnect(token) {
-      SystemResult.Ok => {
-        return SystemResult.Error(Error(1, "Foreign registration accepted"));
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return SystemResult.Overflow(error);
+  function identities() void throws {
+    var id = String("org.sunlang.Events.Outer");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var token = loop.on_clicked(state.button, nested);
+    var other_id = String("org.sunlang.Events.Other");
+    var other_app = gtk.Application(other_id);
+    var other = gtk.EventLoop<State>(other_app);
+
+    var operation_completed_7 = false;
+    try {
+      other.disconnect(token);
+      operation_completed_7 = true;
+      throw Error(1, "Foreign registration accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_7) {
+        throw;
       }
-    };
+    }
+
     state.button.click();
-    try loop.run(state);
-    try expect(state.count == 1, "Outer dispatch failed after nested rejection");
-    return SystemResult.Ok;
+    loop.run(state);
+    expect(state.count == 1, "Outer dispatch failed after nested rejection");
+    return;
   }
 
   /** Counts events from an emitter whose original Sun wrapper has been destroyed. */
-  function retained(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function retained(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.count += 1;
     context.quit();
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks registration ownership outlives the temporary widget wrapper. */
-  function ownership() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Ownership");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
+  function ownership() void throws {
+    var id = String("org.sunlang.Events.Ownership");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
     if (true) {
-      var label = try String("temporary");
-      var button = try gtk.Button(label);
-      var token = try loop.on_clicked(button, retained);
+      var label = String("temporary");
+      var button = gtk.Button(label);
+      var token = loop.on_clicked(button, retained);
       button.click();
     }
-    try loop.run(state);
-    try expect(state.count == 1, "Emitter did not survive wrapper destruction");
-    return SystemResult.Ok;
+    loop.run(state);
+    expect(state.count == 1, "Emitter did not survive wrapper destruction");
+    return;
   }
 
   /** Marks that a GLib timer was serviced during a long callback-generated click chain. */
-  function serviced(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function serviced(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.inside = true;
-    return SystemResult.Ok;
+    return;
   }
 
   /** Keeps generating events until the bounded batch gives GTK a turn. */
-  function chain(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
+  function chain(state: ref State, context: ref gtk.EventContext<State>) void throws {
     state.count += 1;
     if (state.inside) {
       context.quit();
     } else if (state.count > 128) {
-      return SystemResult.Error(Error(1, "GTK starved behind queued clicks"));
+      throw Error(1, "GTK starved behind queued clicks");
     } else {
       state.button.click();
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks the dispatcher services GTK between bounded event batches. */
-  function fairness() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Fairness");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var click = try loop.on_clicked(state.button, chain);
-    var timer = try loop.after(0, serviced);
+  function fairness() void throws {
+    var id = String("org.sunlang.Events.Fairness");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var click = loop.on_clicked(state.button, chain);
+    var timer = loop.after(0, serviced);
     state.button.click();
-    try loop.run(state);
-    try expect(
+    loop.run(state);
+    expect(
       state.inside and state.count >= 64 and state.count <= 128,
       "Dispatch batch policy differs"
     );
-    return SystemResult.Ok;
+    return;
   }
 
   /** Attempts loop mutation on a worker; the main-thread guard must terminate first. */
   function worker(loop: gtk.EventLoop<State>) i32 {
-    ignore_error(loop.after(0, unexpected));
+    try {
+      loop.after(0, unexpected);
+    } catch {}
     return 0;
   }
 
   /** Moves a loop to a worker to exercise the loop-specific thread guard. */
-  function worker_thread() SystemResult<void> {
-    var id = try String("org.sunlang.Events.Worker");
-    var app = try gtk.Application(id);
-    var loop = try gtk.EventLoop<State>(app);
-    var thread = try std.thread.spawn(worker, loop);
+  function worker_thread() void throws {
+    var id = String("org.sunlang.Events.Worker");
+    var app = gtk.Application(id);
+    var loop = gtk.EventLoop<State>(app);
+    var thread = std.thread.spawn(worker, loop);
     var status = thread.join();
-    return SystemResult.Error(Error(1, "Worker thread was allowed to mutate the loop"));
+    throw Error(1, "Worker thread was allowed to mutate the loop");
   }
 
   /** Attempts manual native dispatch while a callback is active. */
-  function manual(state: ref State, context: ref gtk.EventContext<State>) SystemResult<void> {
-    var id = try String("org.sunlang.Events.Manual");
-    var app = try gtk.Application(id);
+  function manual(state: ref State, context: ref gtk.EventContext<State>) void throws {
+    var id = String("org.sunlang.Events.Manual");
+    var app = gtk.Application(id);
     app.iterate(false);
-    return SystemResult.Error(Error(1, "Manual iteration was allowed during callback dispatch"));
+    throw Error(1, "Manual iteration was allowed during callback dispatch");
   }
 
   /** Exercises the fail-fast guard against legacy manual iteration from callbacks. */
-  function manual_iteration() SystemResult<void> {
-    var id = try String("org.sunlang.Events.ManualOuter");
-    var app = try gtk.Application(id);
-    var state = try State(app);
-    var loop = try gtk.EventLoop<State>(app);
-    var token = try loop.on_clicked(state.button, manual);
+  function manual_iteration() void throws {
+    var id = String("org.sunlang.Events.ManualOuter");
+    var app = gtk.Application(id);
+    var state = State(app);
+    var loop = gtk.EventLoop<State>(app);
+    var token = loop.on_clicked(state.button, manual);
     state.button.click();
     return loop.run(state);
   }
@@ -500,61 +476,57 @@ module event_checks {
   extern "C" function sg_test_entry_selection() i32;
 
   /** Checks cleanup on success, callback failure, and dropping an unrun loop. */
-  function cleanup() SystemResult<void> {
+  function cleanup() void throws {
     for (var mode: i32 = 0; mode < 3; mode += 1) {
       if (true) {
-        var id = try String("org.sunlang.Events.Cleanup");
-        try id.append(mode);
-        var app = try gtk.Application(id);
-        try expect(
+        var id = String("org.sunlang.Events.Cleanup");
+        id.append(mode);
+        var app = gtk.Application(id);
+        expect(
           unsafe { sg_test_entry_selection(); } != 0,
           "Unchanged text reset cursor or selection"
         );
         unsafe { sg_test_hold_application(app.raw_handle()); };
-        var state = try State(app);
+        var state = State(app);
         unsafe {
           sg_test_watch_object(state.window.raw_handle());
           sg_test_watch_object(state.button.raw_handle());
         };
-        var loop = try gtk.EventLoop<State>(app);
-        var timer = try loop.every(60000, unexpected);
+        var loop = gtk.EventLoop<State>(app);
+        var timer = loop.every(60000, unexpected);
         if (mode == 0) {
-          var token = try loop.on_clicked(state.button, quit);
+          var token = loop.on_clicked(state.button, quit);
           state.button.click();
-          try loop.run(state);
+          loop.run(state);
         } else if (mode == 1) {
-          var token = try loop.on_clicked(state.button, fail);
+          var token = loop.on_clicked(state.button, fail);
           state.button.click();
-          match loop.run(state) {
-            SystemResult.Ok => {
-              return SystemResult.Error(Error(1, "Cleanup error callback succeeded"));
-            },
-            SystemResult.Error(_) => {},
-            SystemResult.Allocation(error) => {
-              return SystemResult.Allocation(error);
-            },
-            SystemResult.InvalidArgument(error) => {
-              return SystemResult.InvalidArgument(error);
-            },
-            SystemResult.Overflow(error) => {
-              return SystemResult.Overflow(error);
+
+          var operation_completed_6 = false;
+          try {
+            loop.run(state);
+            operation_completed_6 = true;
+            throw Error(1, "Cleanup error callback succeeded");
+          } catch (error: std.Error) {
+            if (operation_completed_6) {
+              throw;
             }
-          };
+          }
         } else {
-          var token = try loop.on_clicked(state.button, unexpected);
+          var token = loop.on_clicked(state.button, unexpected);
           state.button.click();
         }
       }
-      try expect(
+      expect(
         unsafe { sg_test_watched_objects(); } == 0,
         "Loop cleanup retained native widgets"
       );
-      try expect(
+      expect(
         unsafe { sg_test_application_balanced(); } != 0,
         "Loop cleanup retained its application reference"
       );
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Checks one FIFO delivery without exposing native pointers or application state. */
@@ -562,155 +534,143 @@ module event_checks {
     queue: ref gtk.EventQueue,
     expected: const ref gtk.RegistrationId,
     kind: gtk.EventKind
-  ) SystemResult<void> {
-    match try queue.next() {
+  ) void throws {
+    match queue.next() {
       Option.Some(event) => {
         var id = event.registration();
-        try expect(
+        expect(
           id.equals(expected) and event.kind() == kind,
           "Native queue delivery order or kind differs"
         );
       },
       Option.None => {
-        return SystemResult.Error(Error(1, "Native queue lost a delivery"));
+        throw Error(1, "Native queue lost a delivery");
       }
     };
-    return SystemResult.Ok;
+    return;
   }
 
   /** Exercises state-free dispatch, cancellation, retained emitters, and windowless timers. */
-  function native_queue() SystemResult<void> {
+  function native_queue() void throws {
     if (true) {
-      var id = try String("org.sunlang.Events.Queue");
-      var app = try gtk.Application(id);
+      var id = String("org.sunlang.Events.Queue");
+      var app = gtk.Application(id);
       unsafe { sg_test_hold_application(app.raw_handle()); };
       if (true) {
         var window = gtk.Window(app);
-        var label = try String("queued");
-        var first = try gtk.Button(label);
-        var second = try gtk.Button(label);
-        var box = try gtk.Box(gtk.Orientation.Vertical, 8);
-        try window.set_box(box);
-        try box.place_first(first);
-        try box.place_after(second, first);
-        try expect(
+        var label = String("queued");
+        var first = gtk.Button(label);
+        var second = gtk.Button(label);
+        var box = gtk.Box(gtk.Orientation.Vertical, 8);
+        window.set_box(box);
+        box.place_first(first);
+        box.place_after(second, first);
+        expect(
           box.is_first(first) and box.follows(second, first),
           "Checked box placement differs"
         );
-        match window.set_child(second) {
-          SystemResult.Ok => {
-            return SystemResult.Error(Error(1, "Parented button accepted by window"));
-          },
-          SystemResult.Error(_) => {},
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
+
+        var operation_completed_5 = false;
+        try {
+          window.set_child(second);
+          operation_completed_5 = true;
+          throw Error(1, "Parented button accepted by window");
+        } catch (error: std.Error) {
+          if (operation_completed_5) {
+            throw;
           }
-        };
-        var other_box = try gtk.Box(gtk.Orientation.Horizontal, 0);
-        match other_box.place_first(first) {
-          SystemResult.Ok => {
-            return SystemResult.Error(Error(1, "Foreign parent accepted by box"));
-          },
-          SystemResult.Error(_) => {},
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
+        }
+
+        var other_box = gtk.Box(gtk.Orientation.Horizontal, 0);
+
+        var operation_completed_4 = false;
+        try {
+          other_box.place_first(first);
+          operation_completed_4 = true;
+          throw Error(1, "Foreign parent accepted by box");
+        } catch (error: std.Error) {
+          if (operation_completed_4) {
+            throw;
           }
-        };
+        }
+
         unsafe {
           sg_test_watch_object(first.raw_handle());
           sg_test_watch_object(second.raw_handle());
           sg_test_watch_object(box.raw_handle());
           sg_test_watch_object(window.raw_handle());
         };
-        var queue = try gtk.EventQueue(app);
-        match gtk.EventQueue(app) {
-          SystemResult.Ok(_) => {
-            return SystemResult.Error(Error(1, "Nested queue acquired native dispatch"));
-          },
-          SystemResult.Error(_) => {},
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
+        var queue = gtk.EventQueue(app);
+
+        var operation_completed_3 = false;
+        try {
+          gtk.EventQueue(app);
+          operation_completed_3 = true;
+          throw Error(1, "Nested queue acquired native dispatch");
+        } catch (error: std.Error) {
+          if (operation_completed_3) {
+            throw;
           }
-        };
-        var a = try queue.on_clicked(first);
-        var b = try queue.on_clicked(second);
+        }
+
+        var a = queue.on_clicked(first);
+        var b = queue.on_clicked(second);
         second.click();
         first.click();
         second.click();
-        try delivery(queue, b, gtk.EventKind.Clicked);
-        try delivery(queue, a, gtk.EventKind.Clicked);
-        try delivery(queue, b, gtk.EventKind.Clicked);
+        delivery(queue, b, gtk.EventKind.Clicked);
+        delivery(queue, a, gtk.EventKind.Clicked);
+        delivery(queue, b, gtk.EventKind.Clicked);
         first.click();
-        try queue.disconnect(a);
-        try queue.disconnect(a);
-        match try queue.next() {
+        queue.disconnect(a);
+        queue.disconnect(a);
+        match queue.next() {
           Option.Some(_) => {
-            return SystemResult.Error(Error(1, "Canceled native event was delivered"));
+            throw Error(1, "Canceled native event was delivered");
           },
           Option.None => {}
         };
-        var other_id = try String("org.sunlang.Events.QueueForeign");
-        var other_app = try gtk.Application(other_id);
-        var legacy = try gtk.EventLoop<i32>(other_app);
-        var foreign = try legacy.after(60000, unused_queue_callback);
-        match queue.disconnect(foreign) {
-          SystemResult.Ok => {
-            return SystemResult.Error(Error(1, "Foreign queue identity accepted"));
-          },
-          SystemResult.Error(_) => {},
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
+        var other_id = String("org.sunlang.Events.QueueForeign");
+        var other_app = gtk.Application(other_id);
+        var legacy = gtk.EventLoop<i32>(other_app);
+        var foreign = legacy.after(60000, unused_queue_callback);
+
+        var operation_completed_2 = false;
+        try {
+          queue.disconnect(foreign);
+          operation_completed_2 = true;
+          throw Error(1, "Foreign queue identity accepted");
+        } catch (error: std.Error) {
+          if (operation_completed_2) {
+            throw;
           }
-        };
+        }
+
         if (true) {
-          var temporary = try gtk.Button(label);
-          var token = try queue.on_clicked(temporary);
+          var temporary = gtk.Button(label);
+          var token = queue.on_clicked(temporary);
           temporary.click();
         }
-        match try queue.next() {
+        match queue.next() {
           Option.Some(event) => {
             var token = event.registration();
-            try queue.disconnect(token);
+            queue.disconnect(token);
           },
           Option.None => {
-            return SystemResult.Error(Error(1, "Queue did not retain emitter"));
+            throw Error(1, "Queue did not retain emitter");
           }
         };
-        var close_id = try queue.on_closed(window);
+        var close_id = queue.on_closed(window);
         window.close();
-        try delivery(queue, close_id, gtk.EventKind.Closed);
-        var timer = try queue.after(0);
+        delivery(queue, close_id, gtk.EventKind.Closed);
+        var timer = queue.after(0);
         var received = false;
         while (received == false) {
           queue.iterate(true);
-          match try queue.next() {
+          match queue.next() {
             Option.Some(event) => {
               var token = event.registration();
-              try expect(
+              expect(
                 token.equals(timer) and event.kind() == gtk.EventKind.Timer,
                 "Windowless timer was lost"
               );
@@ -719,40 +679,37 @@ module event_checks {
             Option.None => {}
           };
         }
-        try queue.disconnect(timer);
-        try expect(box.remove(second), "Box could not remove owned child");
-        try second.set_label(label);
-        try expect(box.remove(second) == false, "Repeated child removal changed ownership");
+        queue.disconnect(timer);
+        expect(box.remove(second), "Box could not remove owned child");
+        second.set_label(label);
+        expect(box.remove(second) == false, "Repeated child removal changed ownership");
         // Drop with a pending click and live timer to exercise resource cleanup.
         second.click();
-        var pending = try queue.after(60000);
+        var pending = queue.after(60000);
       }
-      try expect(
+      expect(
         unsafe { sg_test_watched_objects(); } == 0,
         "Native queue retained widgets after destruction"
       );
       // Destruction must release exclusive dispatch for the next consumer.
       if (true) {
-        var next = try gtk.EventQueue(app);
+        var next = gtk.EventQueue(app);
       }
     }
-    try expect(
+    expect(
       unsafe { sg_test_application_balanced(); } != 0,
       "Native queue retained its application"
     );
-    return SystemResult.Ok;
+    return;
   }
 
   /** Supplies a callback type only for the foreign-identity rejection check. */
-  function unused_queue_callback(
-    state: ref i32,
-    context: ref gtk.EventContext<i32>
-  ) SystemResult<void> {
-    return SystemResult.Ok;
+  function unused_queue_callback(state: ref i32, context: ref gtk.EventContext<i32>) void throws {
+    return;
   }
 
   /** Selects one isolated scenario by its test-facing name. */
-  public function run(name: const ref String) SystemResult<void> {
+  public function run(name: const ref String) void throws {
     if (name.equals_literal("native_queue")) {
       return native_queue();
     }
@@ -789,28 +746,32 @@ module event_checks {
     if (name.equals_literal("manual")) {
       return manual_iteration();
     }
-    return SystemResult.Error(Error(1, "Unknown event-loop scenario"));
+    throw Error(1, "Unknown event-loop scenario");
   }
 }
 
 /** Runs one main-thread scenario and reports failures to its parent Sun test. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
   if (args.size() != 2) {
-    return AllocationResult.Ok(2);
+    return 2;
   }
-  match event_checks.run(args[1]) {
-    SystemResult.Ok => {
-      std.io.println("Event scenario passed");
-      return AllocationResult.Ok(0);
-    },
-    (error: const ref IError) => {
-      std.io.eprintln(try error.message());
-      return AllocationResult.Ok(1);
+
+  var operation_completed_1 = false;
+  try {
+    event_checks.run(args[1]);
+    operation_completed_1 = true;
+    std.io.println("Event scenario passed");
+    return 0;
+  } catch (error: std.Error) {
+    if (operation_completed_1) {
+      throw;
     }
-  };
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   libraries: [

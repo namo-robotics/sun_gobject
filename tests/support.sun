@@ -8,85 +8,84 @@ module checks {
     public var path: String;
 
     /** Creates a directory without changing the process working directory. */
-    init() std.test.AssertionResult<void> {
+    init() throws {
       var a = make_heap_allocator();
-      var command = try std.process.Command(a, "mktemp");
-      try command.add_arg("-d");
-      var pattern = try String(test_build.root());
-      try pattern.append("/tmp/sun-tests.XXXXXX");
-      try command.add_arg(pattern);
-      var output = try std.test.expect_system(command.output());
-      try std.test.assert_eq(output.status(), 0);
-      var directory = try output.stdout().clone(a);
+      var command = std.process.Command(a, "mktemp");
+      command.add_arg("-d");
+      var pattern = String(test_build.root());
+      pattern.append("/tmp/sun-tests.XXXXXX");
+      command.add_arg(pattern);
+      var output = command.output();
+      std.test.assert_eq(output.status(), 0);
+      var directory = output.stdout().clone(a);
       directory.trim();
       this.path = directory;
     }
 
     /** Resolves a file beneath this fixture. */
-    public method file(name: static_ptr<u8>) AllocationResult<String> {
+    public method file(name: static_ptr<u8>) String throws {
       var a = make_heap_allocator();
-      var result = try this.path.clone(a);
-      try result.append("/");
-      try result.append(name);
-      return AllocationResult.Ok(result);
+      var result = this.path.clone(a);
+      result.append("/");
+      result.append(name);
+      return result;
     }
 
     /** Removes nested fixture files even after an assertion fails. */
     deinit() {
-      ignore_error(this.remove());
+      try {
+        this.remove();
+      } catch {}
     }
 
     /** Removes the fixture while reporting allocation and process failures. */
-    method remove() SystemResult<void> {
+    method remove() void throws {
       var a = make_heap_allocator();
-      var command = try std.process.Command(a, "rm");
-      try command.add_arg("-rf");
-      try command.add_arg("--");
-      try command.add_arg(this.path);
-      try command.status();
-      return SystemResult.Ok;
+      var command = std.process.Command(a, "rm");
+      command.add_arg("-rf");
+      command.add_arg("--");
+      command.add_arg(this.path);
+      command.status();
+      return;
     }
   }
 
   /** Runs a bounded shell command with fixture, build, compiler, and root arguments. */
-  public function command(
-    fixture: ref Fixture,
-    script: static_ptr<u8>
-  ) std.test.AssertionResult<std.process.Output> {
+  public function command(fixture: ref Fixture, script: static_ptr<u8>) std.process.Output throws {
     var a = make_heap_allocator();
-    var command = try std.process.Command(a, "timeout");
-    try command.add_arg("30s");
-    try command.add_arg("sh");
-    try command.add_arg("-eu");
-    try command.add_arg("-c");
-    try command.add_arg(script);
-    try command.add_arg("sun-tests");
-    try command.add_arg(fixture.path);
-    try command.add_arg(test_build.directory());
-    try command.add_arg(test_build.compiler());
-    try command.add_arg(test_build.root());
-    return std.test.AssertionResult.Ok(try std.test.expect_system(command.output()));
+    var command = std.process.Command(a, "timeout");
+    command.add_arg("30s");
+    command.add_arg("sh");
+    command.add_arg("-eu");
+    command.add_arg("-c");
+    command.add_arg(script);
+    command.add_arg("sun-tests");
+    command.add_arg(fixture.path);
+    command.add_arg(test_build.directory());
+    command.add_arg(test_build.compiler());
+    command.add_arg(test_build.root());
+    return command.output();
   }
 
   /** Reports subprocess diagnostics before asserting its successful exit. */
-  public function success(output: ref std.process.Output) std.test.AssertionResult<void> {
+  public function success(output: ref std.process.Output) void throws {
     if (output.status() != 0) {
       std.io.eprintln(output.stdout());
       std.io.eprintln(output.stderr());
     }
-    try std.test.assert_eq(output.status(), 0);
-    return std.test.AssertionResult.Ok;
+    std.test.assert_eq(output.status(), 0);
+    return;
   }
 
   /** Reads a fixture file and preserves I/O errors as test failures. */
-  public function read(path: ref String) std.test.AssertionResult<String> {
+  public function read(path: ref String) String throws {
     var a = make_heap_allocator();
-    return std.test.AssertionResult.Ok(try std.test.expect_system(std.io.read_to_string(a, path)));
+    return std.io.read_to_string(a, path);
   }
 
   /** Writes a fixture file and preserves I/O errors as test failures. */
-  public function write(path: ref String, value: ref String) std.test.AssertionResult<void> {
-    try std.test.expect_system_success(std.io.write_string(path, value));
-    return std.test.AssertionResult.Ok;
+  public function write(path: ref String, value: ref String) void throws {
+    std.io.write_string(path, value);
+    return;
   }
 }

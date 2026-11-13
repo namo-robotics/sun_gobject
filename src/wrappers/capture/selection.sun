@@ -55,36 +55,36 @@ public module desktop {
     }
 
     /** Opens a selector only for valid portal-provided geometry. */
-    public method open(x: i32, y: i32, width: i32, height: i32) SystemResult<void> {
+    public method open(x: i32, y: i32, width: i32, height: i32) void throws {
       if (this.pointer != null) {
-        return SystemResult.Error(Error(1, "Selection already open"));
+        throw Error(1, "Selection already open");
       }
       this.screen_width = width;
       this.screen_height = height;
       this.pointer = unsafe { sg_selection_new(x, y, width, height); };
-      var error = try from_c_str(
+      var error = from_c_str(
         make_heap_allocator(),
         unsafe { sg_selection_error(this.pointer); }
       );
       if (not error.is_empty()) {
         this.close();
-        return SystemResult.Error(try Error(1, error));
+        throw Error(1, error);
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Advances one input event; returns one on confirmation, two on cancellation, or zero. */
-    public method poll() SystemResult<i32> {
+    public method poll() i32 throws {
       if (this.pointer == null) {
-        return SystemResult.Error(Error(1, "Selection is not open"));
+        throw Error(1, "Selection is not open");
       }
       var event = unsafe { sg_selection_poll(this.pointer); };
       if (event < 0) {
-        return SystemResult.Error(Error(1, "Area selection failed"));
+        throw Error(1, "Area selection failed");
       }
       if (event == 4) {
         this.close();
-        return SystemResult.Ok(2);
+        return 2;
       }
       var px = unsafe { sg_selection_coordinate(this.pointer, 0); };
       var py = unsafe { sg_selection_coordinate(this.pointer, 1); };
@@ -108,9 +108,9 @@ public module desktop {
       }
       if ((event == 3 or event == 5) and this.width > 0 and this.height > 0) {
         this.close();
-        return SystemResult.Ok(1);
+        return 1;
       }
-      return SystemResult.Ok(0);
+      return 0;
     }
   }
 }

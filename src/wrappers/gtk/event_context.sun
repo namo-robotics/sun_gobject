@@ -12,12 +12,12 @@ public module gtk {
     var stopped: bool = false;
 
     /** Creates a dispatch-only context from private loop storage. */
-    init(core: LoopCore, current: RegistrationId, kind: u32) AllocationResult<void> {
+    init(core: LoopCore, current: RegistrationId, kind: u32) throws {
       this.core = core;
       this.current = current;
       this.event = kind == 1 ? EventKind.Clicked : (kind == 2 ? EventKind.Closed : EventKind.Timer);
       var a = make_heap_allocator();
-      this.commands = try Vec<EventCommand<State>>(a, 4);
+      this.commands = Vec<EventCommand<State>>(a, 4);
     }
 
     /** Releases staged registrations on the main thread, including after callback failure. */
@@ -44,11 +44,11 @@ public module gtk {
     }
 
     /** Stages cancellation before any later queued delivery. */
-    public method disconnect(id: const ref RegistrationId) SystemResult<void> {
-      try validate_id(this.core, id);
+    public method disconnect(id: const ref RegistrationId) void throws {
+      validate_id(this.core, id);
       var command: EventCommand<State> = EventCommand.Remove(id.number);
-      try this.commands.push(command);
-      return SystemResult.Ok;
+      this.commands.push(command);
+      return;
     }
 
     /** Creates a window on the retained application without exposing an application handle. */
@@ -60,55 +60,55 @@ public module gtk {
     /** Stages a click callback and retains its button without borrowing the wrapper. */
     public method on_clicked(
       button: ref Button,
-      callback: function (ref State, ref EventContext<State>) SystemResult<void>
-    ) SystemResult<RegistrationId> {
-      var number = try this.core.reserve();
+      callback: function (ref State, ref EventContext<State>) void throws
+    ) RegistrationId throws {
+      var number = this.core.reserve();
       var handler = Handler<State>(number, 1, 0, unsafe { button.raw_handle(); }, callback);
       var command: EventCommand<State> = EventCommand.Add(handler);
-      try this.commands.push(command);
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.commands.push(command);
+      return registration_id(this.core, number);
     }
 
     /** Stages a notification delivered after the specified window closes. */
     public method on_closed(
       window: ref Window,
-      callback: function (ref State, ref EventContext<State>) SystemResult<void>
-    ) SystemResult<RegistrationId> {
-      var number = try this.core.reserve();
+      callback: function (ref State, ref EventContext<State>) void throws
+    ) RegistrationId throws {
+      var number = this.core.reserve();
       var handler = Handler<State>(number, 2, 0, unsafe { window.raw_handle(); }, callback);
       var command: EventCommand<State> = EventCommand.Add(handler);
-      try this.commands.push(command);
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.commands.push(command);
+      return registration_id(this.core, number);
     }
 
     /** Schedules one callback for a future dispatch, including a zero delay. */
     public method after(
       delay_ms: u32,
-      callback: function (ref State, ref EventContext<State>) SystemResult<void>
-    ) SystemResult<RegistrationId> {
-      var number = try this.core.reserve();
+      callback: function (ref State, ref EventContext<State>) void throws
+    ) RegistrationId throws {
+      var number = this.core.reserve();
       var command: EventCommand<State> = EventCommand.Add(
         Handler<State>(number, 3, delay_ms, null, callback)
       );
-      try this.commands.push(command);
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.commands.push(command);
+      return registration_id(this.core, number);
     }
 
     /** Schedules repetition measured from completion of each successful callback. */
     public method every(
       interval_ms: u32,
-      callback: function (ref State, ref EventContext<State>) SystemResult<void>
-    ) SystemResult<RegistrationId> {
+      callback: function (ref State, ref EventContext<State>) void throws
+    ) RegistrationId throws {
       require_thread();
       if (interval_ms == 0) {
-        return SystemResult.Error(Error(1, "Repeating timer interval must be positive"));
+        throw Error(1, "Repeating timer interval must be positive");
       }
-      var number = try this.core.reserve();
+      var number = this.core.reserve();
       var command: EventCommand<State> = EventCommand.Add(
         Handler<State>(number, 4, interval_ms, null, callback)
       );
-      try this.commands.push(command);
-      return SystemResult.Ok(registration_id(this.core, number));
+      this.commands.push(command);
+      return registration_id(this.core, number);
     }
   }
 }

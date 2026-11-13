@@ -22,23 +22,20 @@ public module desktop {
   extern "C" function sg_capture_cpus() i32;
 
   /** Copies a valid native string before releasing its allocation. */
-  function take_text(pointer: raw_ptr<u8>) std.AllocationResult<String> {
+  function take_text(pointer: raw_ptr<u8>) String throws {
     var text = from_c_str(make_heap_allocator(), pointer);
     unsafe { sg_capture_string_free(pointer); };
     return text;
   }
 
   /** Rejects embedded NUL characters before passing a string to native APIs. */
-  function validate(text: ref String) SystemResult<void> {
+  function validate(text: ref String) void throws {
     for (var i: i64 = 0; i < text.length(); i += 1) {
-      if (match text.at(i) {
-        AccessResult.Ok(value) => value == 0,
-        AccessResult.OutOfBounds(_) => true
-      }) {
-        return SystemResult.Error(Error(1, "Native text contains a NUL byte"));
+      if (text.at(i) == 0) {
+        throw Error(1, "Native text contains a NUL byte");
       }
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Installs handlers for this dedicated helper's interrupt and termination signals. */
@@ -52,15 +49,13 @@ public module desktop {
   }
 
   /** Copies the user's configured pictures or videos directory. */
-  public function media_directory(video: bool) std.AllocationResult<String> {
-    return std.AllocationResult.Ok(
-      try from_c_str(make_heap_allocator(), unsafe { sg_capture_directory(video ? 1 : 0); })
-    );
+  public function media_directory(video: bool) String throws {
+    return from_c_str(make_heap_allocator(), unsafe { sg_capture_directory(video ? 1 : 0); });
   }
 
   /** Generates a unique timestamp for an output filename. */
-  public function filename_stamp() std.AllocationResult<String> {
-    return std.AllocationResult.Ok(try take_text(unsafe { sg_capture_stamp(); }));
+  public function filename_stamp() String throws {
+    return take_text(unsafe { sg_capture_stamp(); });
   }
 
   /** Returns an encoder budget capped at half the available cores and a small upper limit. */
