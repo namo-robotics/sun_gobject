@@ -13,9 +13,6 @@ function main() i32 throws {
   }
 }
 manifest {
-  source_files: [
-    "../src/results.sun"
-  ]
   libraries: [
     "stdlib.moon"
   ]

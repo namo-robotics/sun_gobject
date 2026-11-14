@@ -192,9 +192,13 @@ public module gtk {
       if (unsafe { sg_loop_begin(this.core.pointer); } == 0) {
         throw Error(1, "Event loop is finished or dispatch is already active");
       }
-      var result = this.dispatch_loop(state);
+      try {
+        this.dispatch_loop(state);
+      } catch {
+        this.finish();
+        throw;
+      }
       this.finish();
-      return result;
     }
   }
 }

@@ -529,9 +529,6 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   }
 }
 manifest {
-  source_files: [
-    "../src/results.sun"
-  ]
   libraries: [
     "stdlib.moon"
   ]
