@@ -13,6 +13,6 @@ manifest {
     "generator.sun",
     "integration.sun",
     "events.sun",
-    "$SUN_GOBJECT_BUILD/test-config.sun"
+    "$SUN_BUILD/test-config.sun"
   ]
 }

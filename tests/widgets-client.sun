@@ -3,6 +3,22 @@ using std;
 /** Waits briefly for the GTK frame clock during bounded native acceptance checks. */
 extern "C" function g_usleep(microseconds: u64) void;
 
+/** Dispatches dialog startup work before simulating a user's cancellation. */
+function prepare_dialog_cancellation(app: ref gtk.Application) void throws {
+  // GTK's fallback chooser loads its file model asynchronously after show().
+  var queue = gtk.EventQueue(app);
+  queue.after(1000);
+  while (true) {
+    queue.iterate(true);
+    match queue.next() {
+      Option.Some(_) => {
+        return;
+      },
+      Option.None => {}
+    };
+  }
+}
+
 /** Verifies weighted grid allocation and captured editable values through checked APIs. */
 function declarative_widgets(app: ref gtk.Application) void throws {
   var window = gtk.Window(app);
@@ -194,6 +210,7 @@ function run() void throws {
     }
   }
 
+  prepare_dialog_cancellation(app);
   chooser.cancel();
   chooser.cancel();
   if (chooser.is_open()) {
@@ -221,6 +238,7 @@ function run() void throws {
     }
   }
 
+  prepare_dialog_cancellation(app);
   open.cancel();
   open.cancel();
   if (open.is_open()) {

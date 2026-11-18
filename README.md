@@ -179,6 +179,10 @@ sun --dynamic --path-var SUN_GOBJECT_BUILD="$PWD/dist/lib/sun" \
 ./my-app
 ```
 
+For a configured build, pass its build directory as the optional final argument:
+`sun tools/build.sun -- install PREFIX BUILD_DIR`. Without it, installation uses
+`build/` relative to the project root.
+
 Bundles must match the consumer's Sun compiler and platform. The project adapter
 links statically; GTK and GLib remain shared system dependencies. No
 `LD_LIBRARY_PATH` override is needed.

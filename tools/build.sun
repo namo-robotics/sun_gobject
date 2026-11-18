@@ -331,12 +331,14 @@ module build_tasks {
     return;
   }
 
-  /** Installs Sun products alongside the independently installed native library. */
-  public function install(prefix: ref String) void throws {
+  /** Installs products from the selected build directory alongside native libraries. */
+  public function install(prefix: ref String, build: ref String) void throws {
     var a = make_heap_allocator();
     var native = std.process.Command(a, "cmake");
     native.add_arg("--install");
-    native.add_arg("build/native");
+    var native_path = build.clone(a);
+    native_path.append("/native");
+    native.add_arg(native_path);
     native.add_arg("--prefix");
     native.add_arg(prefix);
     run(native);
@@ -351,14 +353,24 @@ module build_tasks {
     run(mkdir);
     var bundles = std.process.Command(a, "install");
     bundles.add_arg("-m644");
-    bundles.add_arg("build/sun_gobject.moon");
-    bundles.add_arg("build/sun_gtk.moon");
-    bundles.add_arg("build/sun_capture.moon");
+    var core = build.clone(a);
+    core.append("/sun_gobject.moon");
+    var gtk = build.clone(a);
+    gtk.append("/sun_gtk.moon");
+    var capture = build.clone(a);
+    capture.append("/sun_capture.moon");
+    bundles.add_arg(core);
+    bundles.add_arg(gtk);
+    if (std.io.exists(capture)) {
+      bundles.add_arg(capture);
+    }
     bundles.add_arg(lib);
     run(bundles);
     var generator = std.process.Command(a, "install");
     generator.add_arg("-m755");
-    generator.add_arg("build/sun_gir");
+    var generator_path = build.clone(a);
+    generator_path.append("/sun_gir");
+    generator.add_arg(generator_path);
     generator.add_arg(bin);
     run(generator);
     return;
@@ -375,8 +387,12 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
       build_tasks.build();
     } else if (args.size() == 2 and args[1].equals_literal("prepare")) {
       build_tasks.prepare();
-    } else if (args.size() == 3 and args[1].equals_literal("install")) {
-      build_tasks.install(args[2]);
+    } else if ((args.size() == 3 or args.size() == 4) and args[1].equals_literal("install")) {
+      var build = String("build");
+      if (args.size() == 4) {
+        build = args[3].clone(a);
+      }
+      build_tasks.install(args[2], build);
     } else if (args.size() == 2 and args[1].equals_literal("test")) {
       var media = std.process.Command(a, "xvfb-run");
       media.add_arg("-a");
@@ -510,7 +526,9 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
         return 1;
       }
     } else {
-      std.io.eprintln("Usage: sun tools/build.sun -- [prepare|build|test|install PREFIX]");
+      std.io.eprintln(
+        "Usage: sun tools/build.sun -- [prepare|build|test|install PREFIX [BUILD_DIR]]"
+      );
       return 1;
     }
 

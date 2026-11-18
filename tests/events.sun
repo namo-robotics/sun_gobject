@@ -10,7 +10,7 @@ module event_loop_tests {
     var command = std.process.Command(a, "sh");
     command.add_arg("-c");
     command.add_arg(
-      "ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$1/event-client\" \"$2\""
+      "ulimit -c 0; exec timeout 20s env G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$1/event-client\" \"$2\""
     );
     command.add_arg("event-test");
     command.add_arg(test_build.directory());

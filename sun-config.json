@@ -78,7 +78,15 @@
     {
       "name": "sun_gobject_tests",
       "path": "tests/main.sun",
-      "type": "binary"
+      "type": "binary",
+      "requires": [
+        "sun_gobject",
+        "sun_gtk",
+        "sun_gir"
+      ],
+      "build": [
+        "scripts/build-configured-tests.sh"
+      ]
     },
     {
       "name": "release_package_tool",

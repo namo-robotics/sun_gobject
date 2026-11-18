@@ -8,7 +8,7 @@ module integration_tests {
     var fixture = checks.Fixture();
     var output = checks.command(
       fixture,
-      "exec env G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo GSETTINGS_BACKEND=memory timeout 30s dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/widgets-client\""
+      "exec env G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo GSETTINGS_BACKEND=memory timeout 30s dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/widgets-client\""
     );
     checks.success(output);
     std.test.assert(output.stdout().contains("Checked drawing widgets passed"));
@@ -48,7 +48,7 @@ module integration_tests {
     var fixture = checks.Fixture();
     var installed = checks.command(
       fixture,
-      "exec \"$3\" \"$4/tools/build.sun\" -- install \"$1/install\""
+      "cd \"$4\"; exec \"$3\" tools/build.sun -- install \"$1/install\" \"$2\""
     );
     checks.success(installed);
     var source = String(
@@ -73,7 +73,7 @@ module integration_tests {
     var fixture = checks.Fixture();
     var output = checks.command(
       fixture,
-      "exec env -u LD_LIBRARY_PATH G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/gtk-demo\" --self-test"
+      "exec env -u LD_LIBRARY_PATH G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo dbus-run-session -- xvfb-run -a -e /dev/stderr \"$2/gtk-demo\" --self-test"
     );
     checks.success(output);
     std.test.assert(output.stdout().contains("GTK acceptance passed"));

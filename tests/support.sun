@@ -17,7 +17,7 @@ module checks {
       pattern.append("/tmp/sun-tests.XXXXXX");
       command.add_arg(pattern);
       var output = command.output();
-      std.test.assert_eq(output.status(), 0);
+      std.test.assert_eq(0, output.status());
       var directory = output.stdout().clone(a);
       directory.trim();
       this.path = directory;
@@ -74,7 +74,7 @@ module checks {
       std.io.eprintln(output.stdout());
       std.io.eprintln(output.stderr());
     }
-    std.test.assert_eq(output.status(), 0);
+    std.test.assert_eq(0, output.status());
     return;
   }
 
