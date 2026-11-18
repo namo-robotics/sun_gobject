@@ -67,7 +67,13 @@
     {
       "name": "sun_gir",
       "path": "src/generator/main.sun",
-      "type": "binary"
+      "type": "binary",
+      "compile_args": [
+        "--dynamic"
+      ],
+      "pkg_config": [
+        "glib-2.0"
+      ]
     },
     {
       "name": "sun_gobject_tests",
