@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Builds and installs Sun artifacts using separately compiled native libraries. */
 module build_tasks {

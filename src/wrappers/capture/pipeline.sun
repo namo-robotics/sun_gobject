@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Owns a GStreamer pipeline while native callbacks stay within the adapter. */
 public module desktop {

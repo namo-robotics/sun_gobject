@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Packages already-built Linux development artifacts for downstream applications. */
 module release_package {
