@@ -343,8 +343,8 @@ function main() i32 throws {
 }
 manifest {
   libraries: [
-    "stdlib.moon",
-    "sun_gobject.moon",
-    "sun_gtk.moon"
+    "sun/stdlib",
+    "namo-robotics/sun_gobject/sun_gobject",
+    "namo-robotics/sun_gobject/sun_gtk"
   ]
 }

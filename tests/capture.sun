@@ -206,7 +206,7 @@ function main() i32 {
 }
 manifest {
   libraries: [
-    "stdlib.moon",
-    "sun_capture.moon"
+    "sun/stdlib",
+    "namo-robotics/sun_gobject/sun_capture"
   ]
 }

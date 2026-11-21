@@ -7,6 +7,6 @@ manifest {
     "wrappers/core.sun"
   ]
   libraries: [
-    "stdlib.moon"
+    "sun/stdlib"
   ]
 }

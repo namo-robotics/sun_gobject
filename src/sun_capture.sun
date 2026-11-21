@@ -11,6 +11,6 @@ manifest {
     "wrappers/capture/selection.sun"
   ]
   libraries: [
-    "stdlib.moon"
+    "sun/stdlib"
   ]
 }

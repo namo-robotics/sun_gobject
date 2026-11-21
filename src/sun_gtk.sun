@@ -33,7 +33,7 @@ manifest {
     "wrappers/svg/document.sun"
   ]
   libraries: [
-    "sun_gobject.moon",
-    "stdlib.moon"
+    "namo-robotics/sun_gobject/sun_gobject",
+    "sun/stdlib"
   ]
 }

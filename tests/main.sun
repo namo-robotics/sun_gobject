@@ -4,8 +4,8 @@ function main() i32 {
 }
 manifest {
   libraries: [
-    "stdlib.moon",
-    "sun_gobject.moon"
+    "sun/stdlib",
+    "namo-robotics/sun_gobject/sun_gobject"
   ],
   test_files: [
     "support.sun",

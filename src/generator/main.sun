@@ -305,6 +305,6 @@ manifest {
     "xml.sun",
     "gir.sun"
   ] libraries: [
-    "stdlib.moon"
+    "sun/stdlib"
   ]
 }
