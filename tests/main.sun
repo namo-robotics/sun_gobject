@@ -2,11 +2,8 @@
 function main() i32 {
   return 0;
 }
+
 manifest {
-  libraries: [
-    "sun/stdlib",
-    "namo-robotics/sun_gobject/sun_gobject"
-  ],
   test_files: [
     "support.sun",
     "runtime.sun",
@@ -15,4 +12,8 @@ manifest {
     "events.sun",
     "$SUN_BUILD/test-config.sun"
   ]
+  libraries: [
+    "sun/stdlib",
+    "namo-robotics/sun_gobject/sun_gobject"
+  ],
 }

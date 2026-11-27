@@ -1,6 +1,6 @@
+using sg;
 using std;
 using std.mem;
-using sg;
 
 /** Adapts standard-library XML events to the indexed tree used by GIR. */
 public module xml {

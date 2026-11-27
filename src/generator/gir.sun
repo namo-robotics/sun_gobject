@@ -1,6 +1,6 @@
+using sg;
 using std;
 using std.mem;
-using sg;
 
 /** Loads versioned GIR documents and translates the selected native ABI. */
 public module gir {

@@ -1,8 +1,5 @@
 /** Bundles Linux desktop capture ownership and selection without adding dependencies to GTK clients. */
 manifest {
-  archives: [
-    "$SUN_BUILD/native/libsun_capture_native.a"
-  ]
   source_files: [
     "wrappers/capture/runtime.sun",
     "wrappers/capture/portal.sun",
@@ -12,5 +9,8 @@ manifest {
   ]
   libraries: [
     "sun/stdlib"
+  ]
+  archives: [
+    "$SUN_BUILD/native/libsun_capture_native.a"
   ]
 }

@@ -1,8 +1,5 @@
 /** Bundles generated GTK declarations with checked GTK and SVG wrappers. */
 manifest {
-  archives: [
-    "$SUN_BUILD/native/libsun_gobject_native.a"
-  ]
   source_files: [
     "${SUN_BUILD}/generated/sources/gtk.sun",
     "wrappers/gtk/support.sun",
@@ -35,5 +32,8 @@ manifest {
   libraries: [
     "namo-robotics/sun_gobject/sun_gobject",
     "sun/stdlib"
+  ]
+  archives: [
+    "$SUN_BUILD/native/libsun_gobject_native.a"
   ]
 }

@@ -204,6 +204,7 @@ module capture_binding_tests {
 function main() i32 {
   return 0;
 }
+
 manifest {
   libraries: [
     "sun/stdlib",

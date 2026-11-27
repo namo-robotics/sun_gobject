@@ -1,6 +1,6 @@
+using sg;
 using std;
 using std.mem;
-using sg;
 
 /** Parses generator options, validates selected declarations, and writes deterministic artifacts. */
 function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
@@ -299,12 +299,14 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   std.io.println("GIR generation complete");
   return 0;
 }
+
 manifest {
   source_files: [
     "common.sun",
     "xml.sun",
     "gir.sun"
-  ] libraries: [
+  ]
+  libraries: [
     "sun/stdlib"
   ]
 }
